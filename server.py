@@ -60,6 +60,9 @@ def init_db():
                       text TEXT,
                       bg_color TEXT,
                       created_at REAL)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS status_views
+                     (status_id INTEGER, viewer TEXT, viewed_at REAL,
+                      UNIQUE(status_id, viewer))''')
 
 
 init_db()
@@ -191,6 +194,7 @@ def update_profile():
             c.execute("UPDATE messages SET sender=? WHERE sender=?", (new_u, old_u))
             c.execute("UPDATE messages SET receiver=? WHERE receiver=?", (new_u, old_u))
             c.execute("UPDATE statuses SET username=? WHERE username=?", (new_u, old_u))
+            c.execute("UPDATE status_views SET viewer=? WHERE viewer=?", (new_u, old_u))
             c.execute("UPDATE blocks SET blocker=? WHERE blocker=?", (new_u, old_u))
             c.execute("UPDATE blocks SET blocked=? WHERE blocked=?", (new_u, old_u))
 
@@ -210,9 +214,9 @@ def search():
     current_user = request.args.get('user', '')
     with closing(db()) as conn:
         c = conn.cursor()
-        c.execute("SELECT username FROM users WHERE username LIKE ? AND username != ? LIMIT 30",
+        c.execute("SELECT username, avatar FROM users WHERE username LIKE ? AND username != ? LIMIT 30",
                   (f'%{query}%', current_user))
-        results = [row[0] for row in c.fetchall()]
+        results = [{'username': row[0], 'avatar': row[1] or ''} for row in c.fetchall()]
     return jsonify({'users': results})
 
 
@@ -312,6 +316,7 @@ def statuses():
     with closing(db()) as conn, conn:
         c = conn.cursor()
         c.execute("DELETE FROM statuses WHERE created_at < ?", (now - 86400,))
+        c.execute("DELETE FROM status_views WHERE status_id NOT IN (SELECT id FROM statuses)")
 
         if request.method == 'POST':
             data = request.get_json(silent=True) or {}
@@ -328,18 +333,50 @@ def statuses():
                       (user, text, bg, now))
             return jsonify({'status': 'success'})
 
-        user = request.args.get('user')
-        c.execute('''SELECT s.username, s.text, s.bg_color, s.created_at, u.avatar
+        # الحالات تظهر للجميع (وليس للأصدقاء فقط)
+        user = request.args.get('user') or ''
+        c.execute('''SELECT s.id, s.username, s.text, s.bg_color, s.created_at, u.avatar
                      FROM statuses s
                      JOIN users u ON s.username = u.username
-                     WHERE s.username = ? OR s.username IN (SELECT user2 FROM friends WHERE user1 = ?)
-                     ORDER BY s.created_at DESC''', (user, user))
+                     ORDER BY s.created_at DESC
+                     LIMIT 200''')
+        rows = c.fetchall()
         items = []
-        for row in c.fetchall():
-            hours_left = max(1, int((row[3] + 86400 - now) // 3600))
-            items.append({'username': row[0], 'text': row[1], 'bg_color': row[2],
-                          'hours_left': hours_left, 'avatar': row[4] or ''})
+        for row in rows:
+            hours_left = max(1, int((row[4] + 86400 - now) // 3600))
+            item = {'id': row[0], 'username': row[1], 'text': row[2], 'bg_color': row[3],
+                    'hours_left': hours_left, 'avatar': row[5] or ''}
+            if row[1] == user:
+                # صاحب الحالة فقط يرى من شاهدها
+                c.execute('''SELECT v.viewer, u.avatar FROM status_views v
+                             LEFT JOIN users u ON u.username = v.viewer
+                             WHERE v.status_id = ?
+                             ORDER BY v.viewed_at DESC''', (row[0],))
+                item['viewers'] = [{'username': v[0], 'avatar': v[1] or ''} for v in c.fetchall()]
+            items.append(item)
     return jsonify({'statuses': items})
+
+
+@app.route('/status_view', methods=['POST'])
+def status_view():
+    """تسجيل أن مستخدماً شاهد حالة."""
+    data = request.get_json(silent=True) or {}
+    sid = data.get('id')
+    viewer = (data.get('viewer') or '').strip()
+    if not isinstance(sid, int) or not viewer:
+        return err('طلب غير صالح')
+    with closing(db()) as conn, conn:
+        c = conn.cursor()
+        c.execute("SELECT username FROM statuses WHERE id=?", (sid,))
+        row = c.fetchone()
+        if not row or row[0] == viewer:
+            return jsonify({'status': 'success'})
+        c.execute("SELECT 1 FROM users WHERE username=?", (viewer,))
+        if not c.fetchone():
+            return err('المستخدم غير موجود')
+        c.execute("INSERT OR IGNORE INTO status_views (status_id, viewer, viewed_at) VALUES (?, ?, ?)",
+                  (sid, viewer, time.time()))
+    return jsonify({'status': 'success'})
 
 
 # ───────────────────────── Socket.IO ─────────────────────────
