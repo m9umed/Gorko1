@@ -122,6 +122,18 @@ def user(name):
              following=c('select count(*) c from follows where a=?'), i_follow=fo(g.uid, i), mutual=mutual(g.uid, i))
     return jsonify(u)
 
+@app.get('/api/search')
+@auth
+def search():
+    s = request.args.get('q', '').strip().replace('%', '').replace('_', '')
+    if not s: return jsonify([])
+    r = q("select id from users where username like ? and id!=? order by (username like ?) desc, username limit 30",
+          ('%' + s + '%', g.uid, s + '%'))
+    out = []
+    for x in r:
+        u = U(x['id']); u['i_follow'] = fo(g.uid, x['id']); out.append(u)
+    return jsonify(out)
+
 def P(r):
     c = lambda s: q(s, (r['id'],), True)['c']
     return dict(id=r['id'], text=r['text'], media=r['media'], mtype=r['mtype'], ts=r['ts'], user=U(r['uid']),
