@@ -72,12 +72,52 @@ def err(message):
     return jsonify({'status': 'error', 'message': message})
 
 
+def hash_pw(password):
+    """pbkdf2 أخف وأضمن من scrypt على الاستضافات المجانية (ذاكرة/معالج محدود)."""
+    return generate_password_hash(password, method='pbkdf2:sha256')
+
+
 def check_pw(stored, given):
     """يرجع (هل صحيحة، هل تحتاج ترقية للتشفير). يدعم الحسابات القديمة بكلمات مرور نصية."""
     stored = stored or ''
     if stored.startswith(('pbkdf2:', 'scrypt:')):
         return check_password_hash(stored, given), False
     return stored == given, True
+
+
+@app.errorhandler(Exception)
+def on_error(e):
+    """أي خطأ غير متوقع يرجع كـ JSON ليظهر سببه في الصفحة بدل أن يفشل الدخول بصمت."""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.exception('server error')
+    return jsonify({'status': 'error', 'message': f'خطأ في السيرفر: {type(e).__name__}: {e}'}), 500
+
+
+@app.route('/diag')
+def diag():
+    """افتح /diag في المتصفح لفحص قاعدة البيانات والتشفير."""
+    import sys
+    report = {'python': sys.version.split()[0], 'db_path': DB_PATH, 'index_found': bool(find_index())}
+    try:
+        with closing(db()) as conn, conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS _diag (x INTEGER)")
+            conn.execute("INSERT INTO _diag VALUES (1)")
+            conn.execute("DELETE FROM _diag")
+            report['users'] = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        report['db'] = 'ok'
+    except Exception as e:
+        report['db'] = f'خطأ: {type(e).__name__}: {e}'
+    try:
+        t0 = time.time()
+        h = hash_pw('test')
+        report['hash'] = 'ok'
+        report['hash_seconds'] = round(time.time() - t0, 2)
+        report['check'] = check_password_hash(h, 'test')
+    except Exception as e:
+        report['hash'] = f'خطأ: {type(e).__name__}: {e}'
+    return jsonify(report)
 
 
 # ───────────────────────── الصفحة الرئيسية ─────────────────────────
@@ -154,11 +194,11 @@ def auth():
                 return err('كلمة المرور غير صحيحة!')
             if upgrade:
                 c.execute("UPDATE users SET password=? WHERE username=?",
-                          (generate_password_hash(password), username))
+                          (hash_pw(password), username))
             return jsonify({'status': 'success', 'username': username, 'avatar': user[1] or ''})
 
         c.execute("INSERT INTO users (username, password, avatar) VALUES (?, ?, '')",
-                  (username, generate_password_hash(password)))
+                  (username, hash_pw(password)))
     return jsonify({'status': 'success', 'username': username, 'avatar': ''})
 
 
@@ -471,10 +511,4 @@ def delete_message(data):
 
 if __name__ == '__main__':
     index_path = find_index()
-    print('=' * 50)
-    print('❄️  سيرفر قلب جليدي')
-    print('مجلد السيرفر :', BASE_DIR)
-    print('ملف الصفحة   :', index_path or '⚠️ غير موجود! ضع index.html بجانب server.py')
-    print(f'افتح الرابط   : http://127.0.0.1:{PORT}')
-    print('=' * 50)
-    socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)
+    print('
