@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>قلب جليدي 💙❄️</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -32,6 +32,7 @@
             background: var(--bg-gradient);
             color: var(--text-main);
             height: 100vh;
+            height: 100dvh;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -39,7 +40,6 @@
             position: relative;
         }
 
-        /* تأثير الثلج المتساقط في الخلفية */
         .snowflakes {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -58,7 +58,6 @@
             to { transform: translateY(105vh) rotate(360deg); }
         }
 
-        /* شاشة تسجيل الدخول */
         #auth-screen {
             position: relative;
             z-index: 1;
@@ -127,7 +126,6 @@
             box-shadow: var(--ice-glow);
         }
 
-        /* واجهة التطبيق الرئيسية — شاشة كاملة */
         #app-screen {
             position: relative;
             z-index: 1;
@@ -140,7 +138,6 @@
             overflow: hidden;
         }
 
-        /* القائمة الجانبية */
         .sidebar {
             width: 360px;
             flex-shrink: 0;
@@ -230,7 +227,6 @@
             border-radius: 10px;
         }
 
-        /* شريط التنقل السفلي */
         .bottom-nav {
             display: flex;
             border-top: 1px solid var(--ice-border);
@@ -262,7 +258,6 @@
             box-shadow: var(--ice-glow);
         }
 
-        /* قسم الحالات */
         .status-card {
             padding: 16px;
             border-radius: 18px;
@@ -299,7 +294,6 @@
         }
         .color-dot.selected { border-color: #fff; transform: scale(1.15); }
 
-        /* منطقة المحادثة */
         .chat-area {
             flex: 1;
             min-width: 0;
@@ -320,7 +314,6 @@
         .chat-who { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
         .chat-who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-        /* زر الرجوع (يظهر على الجوال فقط) */
         .back-btn {
             display: none;
             width: 40px;
@@ -337,7 +330,6 @@
         }
         .back-btn:hover { transform: none; }
 
-        /* من شاهد الحالة */
         .viewers-btn {
             width: auto;
             margin-top: 10px;
@@ -356,7 +348,6 @@
         }
         .viewer-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.85rem; }
 
-        /* عرض الصورة الشخصية بحجم كبير */
         #avatar-viewer {
             display: none;
             position: fixed;
@@ -501,9 +492,7 @@
         @media (hover: none) {
             .msg.sent:not(.deleted) .msg-menu-btn { display: flex; }
         }
-        body { height: 100vh; height: 100dvh; }
 
-        /* الجوال: قائمة الدردشات بشاشة كاملة، وعند الضغط على دردشة تُفتح بشاشة كاملة */
         @media (max-width: 900px) {
             .sidebar { width: 100%; border-left: none; }
             .chat-area { display: none; width: 100%; }
@@ -521,7 +510,6 @@
 
     <div class="snowflakes" id="snow-container"></div>
 
-    <!-- شاشة تسجيل الدخول -->
     <div id="auth-screen">
         <div class="logo">قلب جليدي 💙❄️</div>
         <p class="subtitle">أدخل اسم المستخدم وكلمة المرور للدخول إلى عالم الجليد</p>
@@ -529,10 +517,9 @@
         <input type="password" id="password-input" placeholder="كلمة المرور...">
         <button id="login-btn" onclick="login()">دخول ❄️</button>
         <p id="auth-error" style="color: #fca5a5; margin-top: 12px; font-size: 0.9rem;"></p>
-        <p style="margin-top: 10px; font-size: 0.7rem; opacity: 0.5;">نسخة 3</p>
+        <p style="margin-top: 10px; font-size: 0.7rem; opacity: 0.5;">نسخة 3.1</p>
     </div>
 
-    <!-- واجهة التطبيق -->
     <div id="app-screen">
         <div class="sidebar">
             <div class="sidebar-header">
@@ -543,7 +530,6 @@
                 </div>
             </div>
 
-            <!-- 1. تبويب الأصدقاء -->
             <div id="tab-friends" class="tab-content">
                 <div class="search-box">
                     <input type="text" id="search-input" placeholder="ابحث عن صديق بالاسم...">
@@ -559,7 +545,6 @@
                 </div>
             </div>
 
-            <!-- 2. تبويب الحالات (24 ساعة) -->
             <div id="tab-statuses" class="tab-content" style="display: none;">
                 <div class="list-container">
                     <div class="section-title">أضف حالة نصية (تختفي بعد 24 ساعة) ❄️</div>
@@ -576,11 +561,18 @@
                 </div>
             </div>
 
-            <!-- 3. تبويب الإعدادات -->
             <div id="tab-settings" class="tab-content" style="display: none;">
                 <div class="list-container">
                     <div class="section-title">إعدادات الحساب الجليدي ⚙️</div>
                     <div style="text-align: center; margin: 15px 0;">
                         <div id="settings-avatar-preview" class="avatar" style="width: 80px; height: 80px; font-size: 1.8rem; margin: 0 auto 10px;"></div>
                         <label style="display: inline-block; padding: 6px 14px; background: rgba(56, 189, 248, 0.2); border: 1px solid var(--ice-border); border-radius: 10px; cursor: pointer; font-size: 0.85rem;">
-                            تغيير صورة الحساب ?
+                            تغيير صورة الحساب 📷
+                            <input type="file" id="avatar-file-input" accept="image/*" style="display: none;" onchange="previewAvatar(event)">
+                        </label>
+                    </div>
+                    <div class="section-title">تغيير اسم المستخدم:</div>
+                    <input type="text" id="new-username-input" placeholder="اسم المستخدم الجديد...">
+                    <button onclick="saveSettings()">حفظ التعديلات 💾</button>
+                    <button onclick="logout()" style="margin-top: 10px; background: rgba(255,255,255,0.08);">تسجيل الخروج 🚪</button>
+                    <p id="settings-msg" style="margin-top: 10px; font-
