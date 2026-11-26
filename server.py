@@ -26,13 +26,21 @@ PORT = int(os.environ.get('PORT', 5000))
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'icy_heart_secret_2026')
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+socketio = SocketIO(
+    app,
+    cors_allowed_origins='*',
+    async_mode='threading',
+    ping_timeout=60,
+    ping_interval=25,
+)
 
 
 # ───────────────────────── قاعدة البيانات ─────────────────────────
 
 def db():
-    return sqlite3.connect(DB_PATH, timeout=10)
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+    conn.execute("PRAGMA busy_timeout = 30000")
+    return conn
 
 
 def init_db():
@@ -373,7 +381,6 @@ def statuses():
                       (user, text, bg, now))
             return jsonify({'status': 'success'})
 
-        # الحالات تظهر للجميع (وليس للأصدقاء فقط)
         user = request.args.get('user') or ''
         c.execute('''SELECT s.id, s.username, s.text, s.bg_color, s.created_at, u.avatar
                      FROM statuses s
@@ -387,7 +394,6 @@ def statuses():
             item = {'id': row[0], 'username': row[1], 'text': row[2], 'bg_color': row[3],
                     'hours_left': hours_left, 'avatar': row[5] or ''}
             if row[1] == user:
-                # صاحب الحالة فقط يرى من شاهدها
                 c.execute('''SELECT v.viewer, u.avatar FROM status_views v
                              LEFT JOIN users u ON u.username = v.viewer
                              WHERE v.status_id = ?
@@ -509,6 +515,4 @@ def delete_message(data):
         emit('message_removed', {'id': msg_id}, room=user)
 
 
-if __name__ == '__main__':
-    index_path = find_index()
-    print('
+if __name__ == '__m
