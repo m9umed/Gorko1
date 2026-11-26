@@ -1,443 +1,255 @@
-# -*- coding: utf-8 -*-
-"""
-سيرفر قلب جليدي 💙❄️
-التشغيل:   python server.py
-ثم افتح:   http://127.0.0.1:5000
+import os, re, sqlite3, secrets
+from functools import wraps
+from flask import Flask, request, jsonify, send_from_directory, g
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
-المتطلبات:
-    pip install flask flask-socketio flask-cors simple-websocket
-"""
-import glob
-import html
-import os
-import sqlite3
-import time
-from contextlib import closing
+B = os.path.dirname(os.path.abspath(__file__))
+UP = os.path.join(B, 'uploads'); os.makedirs(UP, exist_ok=True)
+DB = os.path.join(B, 'ramales.db')
+app = Flask(__name__, static_folder=None)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+NOW = "default (cast(strftime('%s','now') as integer))"
+with sqlite3.connect(DB) as c:
+    c.executescript(f'''
+create table if not exists users(id integer primary key,email text unique,username text unique,pw text,avatar text);
+create table if not exists sessions(token text primary key,uid int);
+create table if not exists posts(id integer primary key,uid int,text text,media text,mtype text,ts int {NOW});
+create table if not exists likes(pid int,uid int,primary key(pid,uid));
+create table if not exists comments(id integer primary key,pid int,uid int,text text,ts int {NOW});
+create table if not exists follows(a int,b int,primary key(a,b));
+create table if not exists notifs(id integer primary key,uid int,kind text,frm int,seen int default 0,ts int {NOW});
+create table if not exists msgs(id integer primary key,a int,b int,text text,media text,mtype text,edited int default 0,deleted int default 0,seen int default 0,ts int {NOW});
+create table if not exists blocks(a int,b int,primary key(a,b));
+create table if not exists chatclr(uid int,o int,mid int,primary key(uid,o));''')
 
-from flask import Flask, Response, jsonify, request
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit, join_room
-from werkzeug.security import check_password_hash, generate_password_hash
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'icy_heart.db')
-PORT = int(os.environ.get('PORT', 5000))
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'icy_heart_secret_2026')
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
-
-
-# ───────────────────────── قاعدة البيانات ─────────────────────────
 
 def db():
-    return sqlite3.connect(DB_PATH, timeout=10)
-
-
-def init_db():
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS users
-                     (username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT '')''')
-        c.execute('''CREATE TABLE IF NOT EXISTS friends
-                     (user1 TEXT, user2 TEXT, UNIQUE(user1, user2))''')
-        c.execute('''CREATE TABLE IF NOT EXISTS blocks
-                     (blocker TEXT, blocked TEXT, UNIQUE(blocker, blocked))''')
-        c.execute('''CREATE TABLE IF NOT EXISTS messages
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      sender TEXT,
-                      receiver TEXT,
-                      text TEXT,
-                      is_read INTEGER DEFAULT 0,
-                      edited INTEGER DEFAULT 0,
-                      deleted_for_all INTEGER DEFAULT 0,
-                      deleted_by_sender INTEGER DEFAULT 0,
-                      deleted_by_receiver INTEGER DEFAULT 0)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS statuses
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      username TEXT,
-                      text TEXT,
-                      bg_color TEXT,
-                      created_at REAL)''')
-
-
-init_db()
-
-
-def err(message):
-    return jsonify({'status': 'error', 'message': message})
-
-
-def check_pw(stored, given):
-    """يرجع (هل صحيحة، هل تحتاج ترقية للتشفير). يدعم الحسابات القديمة بكلمات مرور نصية."""
-    stored = stored or ''
-    if stored.startswith(('pbkdf2:', 'scrypt:')):
-        return check_password_hash(stored, given), False
-    return stored == given, True
-
-
-# ───────────────────────── الصفحة الرئيسية ─────────────────────────
-
-def find_index():
-    """يبحث عن index.html بجانب السيرفر، وإلا في مجلد التشغيل، وإلا أي ملف index*.html."""
-    folders = [BASE_DIR]
-    if os.getcwd() != BASE_DIR:
-        folders.append(os.getcwd())
-    for d in folders:
-        p = os.path.join(d, 'index.html')
-        if os.path.isfile(p):
-            return p
-    for d in folders:
-        found = sorted(glob.glob(os.path.join(d, 'index*.html')))
-        if found:
-            return found[0]
-    return None
-
-
-@app.route('/')
-@app.route('/index.html')
-def index():
-    path = find_index()
-    if not path:
-        files = ' ، '.join(sorted(os.listdir(BASE_DIR)))
-        page = (
-            '<html dir="rtl" lang="ar"><meta charset="utf-8">'
-            '<body style="font-family:sans-serif;background:#0f172a;color:#f0f9ff;padding:24px">'
-            '<h2>السيرفر شغّال، لكن ما لقيت ملف index.html</h2>'
-            f'<p>مجلد السيرفر: <code dir="ltr">{html.escape(BASE_DIR)}</code></p>'
-            f'<p>الملفات الموجودة فيه: <code dir="ltr">{html.escape(files)}</code></p>'
-            '<p>ضع index.html في نفس هذا المجلد ثم حدّث الصفحة.</p></body></html>'
-        )
-        return Response(page, status=404, mimetype='text/html')
-    with open(path, 'rb') as f:
-        data = f.read()
-    resp = Response(data, mimetype='text/html')
-    resp.headers['Cache-Control'] = 'no-store'
-    return resp
-
-
-@app.route('/favicon.ico')
-def favicon():
-    return '', 204
-
-
-@app.route('/ping')
-def ping():
-    return jsonify({'status': 'ok'})
-
-
-# ───────────────────────── الحسابات ─────────────────────────
-
-@app.route('/auth', methods=['POST'])
-def auth():
-    data = request.get_json(silent=True) or {}
-    username = (data.get('username') or '').strip()
-    password = (data.get('password') or '').strip()
-
-    if not username or not password:
-        return err('يرجى إدخال اسم المستخدم وكلمة المرور')
-    if len(username) > 30:
-        return err('اسم المستخدم طويل جداً (الحد الأقصى 30 حرفاً)')
-
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT password, avatar FROM users WHERE username=?", (username,))
-        user = c.fetchone()
-
-        if user:
-            ok, upgrade = check_pw(user[0], password)
-            if not ok:
-                return err('كلمة المرور غير صحيحة!')
-            if upgrade:
-                c.execute("UPDATE users SET password=? WHERE username=?",
-                          (generate_password_hash(password), username))
-            return jsonify({'status': 'success', 'username': username, 'avatar': user[1] or ''})
-
-        c.execute("INSERT INTO users (username, password, avatar) VALUES (?, ?, '')",
-                  (username, generate_password_hash(password)))
-    return jsonify({'status': 'success', 'username': username, 'avatar': ''})
-
-
-@app.route('/update_profile', methods=['POST'])
-def update_profile():
-    data = request.get_json(silent=True) or {}
-    old_u = (data.get('old_username') or '').strip()
-    new_u = (data.get('new_username') or '').strip()
-    avatar = data.get('avatar')
-
-    if not new_u:
-        return err('اسم المستخدم لا يمكن أن يكون فارغاً')
-    if len(new_u) > 30:
-        return err('اسم المستخدم طويل جداً (الحد الأقصى 30 حرفاً)')
-    if avatar is not None:
-        if not isinstance(avatar, str) or len(avatar) > 600_000 or \
-                (avatar and not avatar.startswith('data:image/')):
-            return err('صورة غير صالحة')
-
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM users WHERE username=?", (old_u,))
-        if not c.fetchone():
-            return err('الحساب غير موجود')
-
-        if new_u != old_u:
-            c.execute("SELECT 1 FROM users WHERE username=?", (new_u,))
-            if c.fetchone():
-                return err('اسم المستخدم مستخدم بالفعل!')
-            c.execute("UPDATE users SET username=? WHERE username=?", (new_u, old_u))
-            c.execute("UPDATE friends SET user1=? WHERE user1=?", (new_u, old_u))
-            c.execute("UPDATE friends SET user2=? WHERE user2=?", (new_u, old_u))
-            c.execute("UPDATE messages SET sender=? WHERE sender=?", (new_u, old_u))
-            c.execute("UPDATE messages SET receiver=? WHERE receiver=?", (new_u, old_u))
-            c.execute("UPDATE statuses SET username=? WHERE username=?", (new_u, old_u))
-            c.execute("UPDATE blocks SET blocker=? WHERE blocker=?", (new_u, old_u))
-            c.execute("UPDATE blocks SET blocked=? WHERE blocked=?", (new_u, old_u))
-
-        if avatar is not None:
-            c.execute("UPDATE users SET avatar=? WHERE username=?", (avatar, new_u))
-
-        c.execute("SELECT avatar FROM users WHERE username=?", (new_u,))
-        updated_avatar = c.fetchone()[0] or ''
-    return jsonify({'status': 'success', 'username': new_u, 'avatar': updated_avatar})
-
-
-# ───────────────────────── الأصدقاء ─────────────────────────
-
-@app.route('/search', methods=['GET'])
-def search():
-    query = request.args.get('q', '').strip()
-    current_user = request.args.get('user', '')
-    with closing(db()) as conn:
-        c = conn.cursor()
-        c.execute("SELECT username FROM users WHERE username LIKE ? AND username != ? LIMIT 30",
-                  (f'%{query}%', current_user))
-        results = [row[0] for row in c.fetchall()]
-    return jsonify({'users': results})
-
-
-@app.route('/add_friend', methods=['POST'])
-def add_friend():
-    data = request.get_json(silent=True) or {}
-    user1 = data.get('user')
-    user2 = data.get('friend')
-    if not user1 or not user2 or user1 == user2:
-        return err('طلب غير صالح')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM users WHERE username IN (?, ?)", (user1, user2))
-        if c.fetchone()[0] != 2:
-            return err('المستخدم غير موجود')
-        c.execute("INSERT OR IGNORE INTO friends (user1, user2) VALUES (?, ?)", (user1, user2))
-        c.execute("INSERT OR IGNORE INTO friends (user1, user2) VALUES (?, ?)", (user2, user1))
-    return jsonify({'status': 'success'})
-
-
-@app.route('/friends', methods=['GET'])
-def get_friends():
-    user = request.args.get('user')
-    with closing(db()) as conn:
-        c = conn.cursor()
-        c.execute('''SELECT u.username, u.avatar FROM friends f
-                     JOIN users u ON f.user2 = u.username
-                     WHERE f.user1=?''', (user,))
-        friends = [{'username': row[0], 'avatar': row[1] or ''} for row in c.fetchall()]
-    return jsonify({'friends': friends})
-
-
-# ───────────────────────── الرسائل ─────────────────────────
-
-@app.route('/messages', methods=['GET'])
-def get_messages():
-    u1 = request.args.get('u1')
-    u2 = request.args.get('u2')
-    with closing(db()) as conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE blocker=? AND blocked=?", (u1, u2))
-        blocked_by_me = bool(c.fetchone())
-        c.execute("SELECT 1 FROM blocks WHERE blocker=? AND blocked=?", (u2, u1))
-        blocked_me = bool(c.fetchone())
-
-        c.execute('''SELECT id, sender, receiver, text, is_read, edited, deleted_for_all,
-                            deleted_by_sender, deleted_by_receiver
-                     FROM messages
-                     WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
-                     ORDER BY id ASC''', (u1, u2, u2, u1))
-        msgs = []
-        for row in c.fetchall():
-            if row[1] == u1 and row[7] == 1:
-                continue
-            if row[2] == u1 and row[8] == 1:
-                continue
-            msgs.append({
-                'id': row[0], 'sender': row[1], 'receiver': row[2],
-                'text': '' if row[6] else row[3],
-                'is_read': row[4], 'edited': row[5], 'deleted_for_all': row[6],
-            })
-    return jsonify({'messages': msgs, 'blocked_by_me': blocked_by_me, 'blocked_me': blocked_me})
-
-
-@app.route('/clear_chat', methods=['POST'])
-def clear_chat():
-    data = request.get_json(silent=True) or {}
-    u, f = data.get('user'), data.get('friend')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("UPDATE messages SET deleted_by_sender=1 WHERE sender=? AND receiver=?", (u, f))
-        c.execute("UPDATE messages SET deleted_by_receiver=1 WHERE receiver=? AND sender=?", (u, f))
-    return jsonify({'status': 'success'})
-
-
-@app.route('/toggle_block', methods=['POST'])
-def toggle_block():
-    data = request.get_json(silent=True) or {}
-    u, f = data.get('user'), data.get('friend')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE blocker=? AND blocked=?", (u, f))
-        if c.fetchone():
-            c.execute("DELETE FROM blocks WHERE blocker=? AND blocked=?", (u, f))
-            blocked = False
-        else:
-            c.execute("INSERT OR IGNORE INTO blocks (blocker, blocked) VALUES (?, ?)", (u, f))
-            blocked = True
-    return jsonify({'status': 'success', 'blocked': blocked})
-
-
-# ───────────────────────── الحالات (24 ساعة) ─────────────────────────
-
-@app.route('/statuses', methods=['GET', 'POST'])
-def statuses():
-    now = time.time()
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM statuses WHERE created_at < ?", (now - 86400,))
-
-        if request.method == 'POST':
-            data = request.get_json(silent=True) or {}
-            user = data.get('user')
-            text = (data.get('text') or '').strip()
-            bg = data.get('bg_color') or ''
-            if not user or not text:
-                return err('اكتب نص الحالة أولاً')
-            if len(text) > 500:
-                return err('الحالة طويلة جداً')
-            if not bg.startswith('linear-gradient(') or 'url' in bg.lower() or len(bg) > 200:
-                bg = 'linear-gradient(135deg, #0284c7, #1e3a8a)'
-            c.execute("INSERT INTO statuses (username, text, bg_color, created_at) VALUES (?, ?, ?, ?)",
-                      (user, text, bg, now))
-            return jsonify({'status': 'success'})
-
-        user = request.args.get('user')
-        c.execute('''SELECT s.username, s.text, s.bg_color, s.created_at, u.avatar
-                     FROM statuses s
-                     JOIN users u ON s.username = u.username
-                     WHERE s.username = ? OR s.username IN (SELECT user2 FROM friends WHERE user1 = ?)
-                     ORDER BY s.created_at DESC''', (user, user))
-        items = []
-        for row in c.fetchall():
-            hours_left = max(1, int((row[3] + 86400 - now) // 3600))
-            items.append({'username': row[0], 'text': row[1], 'bg_color': row[2],
-                          'hours_left': hours_left, 'avatar': row[4] or ''})
-    return jsonify({'statuses': items})
-
-
-# ───────────────────────── Socket.IO ─────────────────────────
-
-@socketio.on('join')
-def on_join(data):
-    username = (data or {}).get('username')
-    if username:
-        join_room(username)
-
-
-@socketio.on('send_message')
-def handle_message(data):
-    data = data or {}
-    sender, receiver = data.get('sender'), data.get('receiver')
-    text = (data.get('text') or '').strip()
-    if not sender or not receiver or not text or len(text) > 4000:
-        return
-
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE (blocker=? AND blocked=?) OR (blocker=? AND blocked=?)",
-                  (sender, receiver, receiver, sender))
-        if c.fetchone():
-            return
-        c.execute("INSERT INTO messages (sender, receiver, text) VALUES (?, ?, ?)",
-                  (sender, receiver, text))
-        msg_id = c.lastrowid
-
-    payload = {'id': msg_id, 'sender': sender, 'receiver': receiver, 'text': text,
-               'is_read': 0, 'edited': 0, 'deleted_for_all': 0}
-    emit('receive_message', payload, room=receiver)
-    emit('receive_message', payload, room=sender)
-
-
-@socketio.on('mark_read')
-def mark_read(data):
-    data = data or {}
-    sender, receiver = data.get('sender'), data.get('receiver')
-    if not sender or not receiver:
-        return
-    with closing(db()) as conn, conn:
-        conn.execute("UPDATE messages SET is_read=1 WHERE sender=? AND receiver=? AND is_read=0",
-                     (sender, receiver))
-    emit('messages_read', {'by': receiver}, room=sender)
-
-
-@socketio.on('edit_message')
-def edit_message(data):
-    data = data or {}
-    msg_id, sender, receiver = data.get('id'), data.get('sender'), data.get('receiver')
-    new_text = (data.get('text') or '').strip()
-    if not msg_id or not sender or not new_text or len(new_text) > 4000:
-        return
-    with closing(db()) as conn, conn:
-        cur = conn.execute(
-            "UPDATE messages SET text=?, edited=1 WHERE id=? AND sender=? AND deleted_for_all=0",
-            (new_text, msg_id, sender))
-        if cur.rowcount == 0:
-            return
-    payload = {'id': msg_id, 'text': new_text, 'edited': 1}
-    emit('message_updated', payload, room=sender)
-    emit('message_updated', payload, room=receiver)
-
-
-@socketio.on('delete_message')
-def delete_message(data):
-    data = data or {}
-    msg_id, mode, user, friend = data.get('id'), data.get('mode'), data.get('user'), data.get('friend')
-    if not msg_id or not user:
-        return
-    with closing(db()) as conn, conn:
-        if mode == 'everyone':
-            cur = conn.execute("UPDATE messages SET deleted_for_all=1 WHERE id=? AND sender=?",
-                               (msg_id, user))
-            if cur.rowcount == 0:
-                return
-        else:
-            cur = conn.execute("UPDATE messages SET deleted_by_sender=1 WHERE id=? AND sender=?",
-                               (msg_id, user))
-            if cur.rowcount == 0:
-                return
-
-    if mode == 'everyone':
-        payload = {'id': msg_id, 'deleted_for_all': 1, 'text': ''}
-        emit('message_updated', payload, room=user)
-        if friend:
-            emit('message_updated', payload, room=friend)
+    if 'd' not in g:
+        g.d = sqlite3.connect(DB); g.d.row_factory = sqlite3.Row
+    return g.d
+
+@app.teardown_appcontext
+def close(e):
+    d = g.pop('d', None)
+    if d: d.close()
+
+def q(s, a=(), one=False):
+    r = db().execute(s, a).fetchall()
+    return (r[0] if r else None) if one else r
+
+def ex(s, a=()):
+    c = db().execute(s, a); db().commit(); return c.lastrowid
+
+def auth(f):
+    @wraps(f)
+    def w(*a, **k):
+        r = q('select uid from sessions where token=?', (request.headers.get('X-Token', ''),), True)
+        if not r: return jsonify(error='سجّل الدخول أولاً'), 401
+        g.uid = r['uid']
+        return f(*a, **k)
+    return w
+
+def err(m, c=400): return jsonify(error=m), c
+def U(i):
+    r = q('select id,username,avatar from users where id=?', (i,), True)
+    return dict(r) if r else None
+def fo(a, b): return bool(q('select 1 from follows where a=? and b=?', (a, b), True))
+def mutual(a, b): return fo(a, b) and fo(b, a)
+def blk(a, b): return bool(q('select 1 from blocks where (a=? and b=?) or (a=? and b=?)', (a, b, b, a), True))
+def clr(o):
+    c = q('select mid from chatclr where uid=? and o=?', (g.uid, o), True)
+    return c['mid'] if c else 0
+def mk(i):
+    t = secrets.token_hex(24); ex('insert into sessions values(?,?)', (t, i)); return t
+
+def save(f):
+    if not f or not f.filename: return None, None
+    ext = os.path.splitext(secure_filename(f.filename))[1].lower() or '.bin'
+    n = secrets.token_hex(8) + ext
+    f.save(os.path.join(UP, n))
+    m = (f.mimetype or '').split('/')[0]
+    return '/uploads/' + n, (m if m in ('image', 'video', 'audio') else 'file')
+
+
+@app.get('/')
+def index(): return send_from_directory(B, 'index.html')
+
+@app.get('/uploads/<path:n>')
+def uploads(n): return send_from_directory(UP, n)
+
+@app.post('/api/register')
+def register():
+    f = request.form
+    e, n, p = f.get('email', '').strip().lower(), f.get('username', '').strip(), f.get('password', '')
+    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', e): return err('الإيميل غير صحيح')
+    if not re.match(r'^[\w\u0600-\u06FF.]{3,20}$', n): return err('اسم المستخدم من 3 إلى 20 حرف بدون مسافات')
+    if len(p) < 6: return err('كلمة المرور 6 أحرف على الأقل')
+    if q('select 1 from users where email=? or username=?', (e, n), True): return err('الإيميل أو اسم المستخدم مستخدم من قبل')
+    a, t = save(request.files.get('avatar'))
+    if a and t != 'image': return err('صورة الحساب لازم تكون صورة')
+    i = ex('insert into users(email,username,pw,avatar) values(?,?,?,?)', (e, n, generate_password_hash(p), a))
+    return jsonify(token=mk(i))
+
+@app.post('/api/login')
+def login():
+    d = request.get_json(silent=True) or {}
+    x = d.get('user', '').strip().lower()
+    r = q('select * from users where lower(username)=? or email=?', (x, x), True)
+    if not r or not check_password_hash(r['pw'], d.get('password', '')): return err('بيانات الدخول غير صحيحة', 401)
+    return jsonify(token=mk(r['id']))
+
+@app.get('/api/me')
+@auth
+def me(): return jsonify(U(g.uid))
+
+@app.get('/api/uid/<int:i>')
+@auth
+def uid(i):
+    u = U(i)
+    if not u: return err('غير موجود', 404)
+    u['blocked'] = bool(q('select 1 from blocks where a=? and b=?', (g.uid, i), True))
+    return jsonify(u)
+
+@app.get('/api/user/<name>')
+@auth
+def user(name):
+    r = q('select id from users where username=?', (name,), True)
+    if not r: return err('المستخدم غير موجود', 404)
+    i = r['id']; u = U(i)
+    c = lambda s: q(s, (i,), True)['c']
+    u.update(posts=c('select count(*) c from posts where uid=?'), followers=c('select count(*) c from follows where b=?'),
+             following=c('select count(*) c from follows where a=?'), i_follow=fo(g.uid, i), mutual=mutual(g.uid, i))
+    return jsonify(u)
+
+def P(r):
+    c = lambda s: q(s, (r['id'],), True)['c']
+    return dict(id=r['id'], text=r['text'], media=r['media'], mtype=r['mtype'], ts=r['ts'], user=U(r['uid']),
+                likes=c('select count(*) c from likes where pid=?'), comments=c('select count(*) c from comments where pid=?'),
+                liked=bool(q('select 1 from likes where pid=? and uid=?', (r['id'], g.uid), True)))
+
+@app.get('/api/feed')
+@auth
+def feed():
+    w, a = [], []
+    if request.args.get('type') == 'video': w.append("mtype='video'")
+    if request.args.get('user'): w.append('uid=?'); a.append(request.args['user'])
+    s = 'select * from posts' + (' where ' + ' and '.join(w) if w else '') + ' order by id desc limit 60'
+    return jsonify([P(r) for r in q(s, a)])
+
+@app.post('/api/posts')
+@auth
+def post():
+    t = request.form.get('text', '').strip(); m, mt = save(request.files.get('file'))
+    if not t and not m: return err('اكتب شيئاً أو أضف صورة/فيديو')
+    if m and mt not in ('image', 'video'): return err('الملف لازم يكون صورة أو فيديو')
+    ex('insert into posts(uid,text,media,mtype) values(?,?,?,?)', (g.uid, t, m, mt))
+    return jsonify(ok=1)
+
+@app.post('/api/like/<int:p>')
+@auth
+def like(p):
+    if q('select 1 from likes where pid=? and uid=?', (p, g.uid), True):
+        ex('delete from likes where pid=? and uid=?', (p, g.uid)); on = False
     else:
-        emit('message_removed', {'id': msg_id}, room=user)
+        ex('insert into likes values(?,?)', (p, g.uid)); on = True
+    return jsonify(on=on, n=q('select count(*) c from likes where pid=?', (p,), True)['c'])
+
+@app.route('/api/comments/<int:p>', methods=['GET', 'POST'])
+@auth
+def comments(p):
+    if request.method == 'POST':
+        t = (request.get_json(silent=True) or {}).get('text', '').strip()
+        if t: ex('insert into comments(pid,uid,text) values(?,?,?)', (p, g.uid, t[:500]))
+        return jsonify(ok=1)
+    return jsonify([dict(text=r['text'], ts=r['ts'], user=U(r['uid'])) for r in q('select * from comments where pid=? order by id', (p,))])
+
+@app.post('/api/follow/<int:i>')
+@auth
+def follow(i):
+    if i == g.uid: return err('لا يمكنك متابعة نفسك')
+    if fo(g.uid, i):
+        ex('delete from follows where a=? and b=?', (g.uid, i)); on = False
+    else:
+        ex('insert into follows values(?,?)', (g.uid, i)); on = True
+        ex('insert into notifs(uid,kind,frm) values(?,?,?)', (i, 'accept' if fo(i, g.uid) else 'follow', g.uid))
+    return jsonify(on=on)
+
+@app.get('/api/notifs')
+@auth
+def notifs():
+    r = q('select * from notifs where uid=? order by id desc limit 50', (g.uid,))
+    out = [dict(kind=x['kind'], ts=x['ts'], user=U(x['frm'])) for x in r]
+    ex('update notifs set seen=1 where uid=?', (g.uid,))
+    return jsonify(out)
+
+@app.get('/api/badges')
+@auth
+def badges():
+    return jsonify(n=q('select count(*) c from notifs where uid=? and seen=0', (g.uid,), True)['c'],
+                   m=q('select count(*) c from msgs where b=? and seen=0', (g.uid,), True)['c'])
+
+@app.get('/api/chats')
+@auth
+def chats():
+    out = []
+    for x in q('select b from follows f where a=? and exists(select 1 from follows where a=f.b and b=?)', (g.uid, g.uid)):
+        o = x['b']
+        if blk(g.uid, o): continue
+        l = q('select * from msgs where id>? and ((a=? and b=?) or (a=? and b=?)) order by id desc limit 1', (clr(o), g.uid, o, o, g.uid), True)
+        un = q('select count(*) c from msgs where a=? and b=? and seen=0', (o, g.uid), True)['c']
+        last = ''
+        if l: last = '🚫 رسالة محذوفة' if l['deleted'] else (l['text'] or '📎 وسائط')
+        out.append(dict(user=U(o), last=last, unread=un, id=l['id'] if l else 0))
+    out.sort(key=lambda d: -d['id'])
+    return jsonify(out)
+
+@app.get('/api/msg/<int:o>')
+@auth
+def msgs(o):
+    ex('update msgs set seen=1 where a=? and b=?', (o, g.uid))
+    r = q('select * from msgs where id>? and ((a=? and b=?) or (a=? and b=?)) order by id', (clr(o), g.uid, o, o, g.uid))
+    return jsonify([dict(id=x['id'], me=x['a'] == g.uid, text=x['text'], media=x['media'], mtype=x['mtype'],
+                         edited=x['edited'], deleted=x['deleted'], ts=x['ts']) for x in r])
+
+@app.post('/api/msg/<int:o>')
+@auth
+def send(o):
+    if not mutual(g.uid, o) or blk(g.uid, o): return err('لا يمكن إرسال رسائل لهذا المستخدم', 403)
+    m, t = save(request.files.get('file')); tx = request.form.get('text', '').strip()
+    if not tx and not m: return err('الرسالة فارغة')
+    ex('insert into msgs(a,b,text,media,mtype) values(?,?,?,?,?)', (g.uid, o, tx, m, t))
+    return jsonify(ok=1)
+
+@app.post('/api/msg/edit/<int:i>')
+@auth
+def medit(i):
+    t = (request.get_json(silent=True) or {}).get('text', '').strip()
+    if t: ex('update msgs set text=?,edited=1 where id=? and a=? and deleted=0', (t, i, g.uid))
+    return jsonify(ok=1)
+
+@app.post('/api/msg/del/<int:i>')
+@auth
+def mdel(i):
+    ex("update msgs set deleted=1,text='',media=NULL,mtype=NULL where id=? and a=?", (i, g.uid))
+    return jsonify(ok=1)
+
+@app.post('/api/chat/<int:o>/clear')
+@auth
+def clear(o):
+    m = q('select coalesce(max(id),0) m from msgs where (a=? and b=?) or (a=? and b=?)', (g.uid, o, o, g.uid), True)['m']
+    ex('insert or replace into chatclr values(?,?,?)', (g.uid, o, m))
+    return jsonify(ok=1)
+
+@app.post('/api/block/<int:o>')
+@auth
+def block(o):
+    if q('select 1 from blocks where a=? and b=?', (g.uid, o), True):
+        ex('delete from blocks where a=? and b=?', (g.uid, o)); on = False
+    else:
+        ex('insert into blocks values(?,?)', (g.uid, o)); on = True
+    return jsonify(on=on)
 
 
 if __name__ == '__main__':
-    index_path = find_index()
-    print('=' * 50)
-    print('❄️  سيرفر قلب جليدي')
-    print('مجلد السيرفر :', BASE_DIR)
-    print('ملف الصفحة   :', index_path or '⚠️ غير موجود! ضع index.html بجانب server.py')
-    print(f'افتح الرابط   : http://127.0.0.1:{PORT}')
-    print('=' * 50)
-    socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
