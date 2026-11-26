@@ -24,6 +24,13 @@ create table if not exists blocks(a int,b int,primary key(a,b));
 create table if not exists chatclr(uid int,o int,mid int,primary key(uid,o));''')
 
 
+with sqlite3.connect(DB) as c:
+    c.executescript(f'''create table if not exists stories(id integer primary key,uid int,media text,mtype text,ts int {NOW});
+create table if not exists saves(pid int,uid int,primary key(pid,uid));''')
+    try: c.execute('alter table users add column bio text')
+    except sqlite3.OperationalError: pass
+
+
 def db():
     if 'd' not in g:
         g.d = sqlite3.connect(DB); g.d.row_factory = sqlite3.Row
@@ -118,6 +125,7 @@ def user(name):
     if not r: return err('المستخدم غير موجود', 404)
     i = r['id']; u = U(i)
     c = lambda s: q(s, (i,), True)['c']
+    u['bio'] = q('select bio from users where id=?', (i,), True)['bio'] or ''
     u.update(posts=c('select count(*) c from posts where uid=?'), followers=c('select count(*) c from follows where b=?'),
              following=c('select count(*) c from follows where a=?'), i_follow=fo(g.uid, i), mutual=mutual(g.uid, i))
     return jsonify(u)
@@ -138,13 +146,15 @@ def P(r):
     c = lambda s: q(s, (r['id'],), True)['c']
     return dict(id=r['id'], text=r['text'], media=r['media'], mtype=r['mtype'], ts=r['ts'], user=U(r['uid']),
                 likes=c('select count(*) c from likes where pid=?'), comments=c('select count(*) c from comments where pid=?'),
-                liked=bool(q('select 1 from likes where pid=? and uid=?', (r['id'], g.uid), True)))
+                liked=bool(q('select 1 from likes where pid=? and uid=?', (r['id'], g.uid), True)),
+                saved=bool(q('select 1 from saves where pid=? and uid=?', (r['id'], g.uid), True)))
 
 @app.get('/api/feed')
 @auth
 def feed():
     w, a = [], []
     if request.args.get('type') == 'video': w.append("mtype='video'")
+    if request.args.get('tag'): w.append('text like ?'); a.append('%#' + request.args['tag'] + '%')
     if request.args.get('user'): w.append('uid=?'); a.append(request.args['user'])
     s = 'select * from posts' + (' where ' + ' and '.join(w) if w else '') + ' order by id desc limit 60'
     return jsonify([P(r) for r in q(s, a)])
@@ -222,7 +232,7 @@ def msgs(o):
     ex('update msgs set seen=1 where a=? and b=?', (o, g.uid))
     r = q('select * from msgs where id>? and ((a=? and b=?) or (a=? and b=?)) order by id', (clr(o), g.uid, o, o, g.uid))
     return jsonify([dict(id=x['id'], me=x['a'] == g.uid, text=x['text'], media=x['media'], mtype=x['mtype'],
-                         edited=x['edited'], deleted=x['deleted'], ts=x['ts']) for x in r])
+                         edited=x['edited'], deleted=x['deleted'], seen=x['seen'], ts=x['ts']) for x in r])
 
 @app.post('/api/msg/<int:o>')
 @auth
@@ -261,6 +271,77 @@ def block(o):
     else:
         ex('insert into blocks values(?,?)', (g.uid, o)); on = True
     return jsonify(on=on)
+
+
+@app.post('/api/stories')
+@auth
+def story_add():
+    m, t = save(request.files.get('file'))
+    if t not in ('image', 'video'): return err('اختر صورة أو فيديو')
+    ex('insert into stories(uid,media,mtype) values(?,?,?)', (g.uid, m, t)); return jsonify(ok=1)
+
+@app.get('/api/stories')
+@auth
+def stories():
+    r = q("select * from stories where ts>cast(strftime('%s','now') as integer)-86400 and (uid=? or uid in (select b from follows where a=?)) order by id", (g.uid, g.uid))
+    d = {}
+    for x in r: d.setdefault(x['uid'], []).append(dict(media=x['media'], mtype=x['mtype'], ts=x['ts']))
+    out = [dict(user=U(k), items=v) for k, v in d.items()]
+    out.sort(key=lambda s: s['user']['id'] != g.uid)
+    return jsonify(out)
+
+@app.post('/api/save/<int:p>')
+@auth
+def save_post(p):
+    if q('select 1 from saves where pid=? and uid=?', (p, g.uid), True):
+        ex('delete from saves where pid=? and uid=?', (p, g.uid)); on = False
+    else:
+        ex('insert into saves values(?,?)', (p, g.uid)); on = True
+    return jsonify(on=on)
+
+@app.get('/api/saved')
+@auth
+def saved():
+    return jsonify([P(r) for r in q('select p.* from posts p join saves s on s.pid=p.id where s.uid=? order by s.rowid desc', (g.uid,))])
+
+@app.get('/api/post/<int:p>')
+@auth
+def post_get(p):
+    r = q('select * from posts where id=?', (p,), True)
+    return jsonify(P(r)) if r else err('المنشور غير موجود', 404)
+
+@app.post('/api/post/del/<int:p>')
+@auth
+def post_del(p):
+    if q('select 1 from posts where id=? and uid=?', (p, g.uid), True):
+        for t in ('posts where id', 'likes where pid', 'comments where pid', 'saves where pid'): ex(f'delete from {t}=?', (p,))
+    return jsonify(ok=1)
+
+@app.post('/api/post/edit/<int:p>')
+@auth
+def post_edit(p):
+    ex('update posts set text=? where id=? and uid=?', ((request.get_json(silent=True) or {}).get('text', '').strip(), p, g.uid))
+    return jsonify(ok=1)
+
+@app.post('/api/profile')
+@auth
+def profile_upd():
+    ex('update users set bio=? where id=?', (request.form.get('bio', '').strip()[:150], g.uid))
+    a, t = save(request.files.get('avatar'))
+    if a and t == 'image': ex('update users set avatar=? where id=?', (a, g.uid))
+    return jsonify(ok=1)
+
+@app.get('/api/explore')
+@auth
+def explore():
+    r = q("select * from posts where media is not null order by (select count(*) from likes where pid=posts.id) desc, id desc limit 60")
+    return jsonify([dict(id=x['id'], media=x['media'], mtype=x['mtype'], text=x['text']) for x in r])
+
+@app.get('/api/follows/<int:i>/<kind>')
+@auth
+def flist(i, kind):
+    s = 'select a x from follows where b=?' if kind == 'followers' else 'select b x from follows where a=?'
+    return jsonify([dict(U(r['x']), i_follow=fo(g.uid, r['x'])) for r in q(s, (i,))])
 
 
 if __name__ == '__main__':
