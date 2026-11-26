@@ -350,229 +350,333 @@
 
         #avatar-viewer {
             display: none;
-            position: fixed;
-            top: 0; right: 0; bottom: 0; left: 0;
-            z-index: 100;
-            background: rgba(2, 6, 23, 0.92);
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 16px;
-        }
-        #avatar-viewer-img { border-width: 3px; }
+        <script>
+        const SERVER_URL = location.origin || 'https://gorko1.onrender.com';
+        let socket = null;
+        let currentUser = "";
+        let currentAvatar = "";
+        let activeFriend = "";
+        let pendingAvatar = null;
+        let statusBg = 'linear-gradient(135deg, #0284c7, #1e3a8a)';
+        let messagesCache = [];
+        let blockedByMe = false, blockedMe = false;
+        let friendsCache = [];
+        const unread = {};
+        const viewedStatuses = new Set();
+        let statusObserver = null;
+        let chatHistoryPushed = false;
 
-        .chat-actions {
-            display: flex;
-            gap: 8px;
-        }
+        const $ = id => document.getElementById(id);
 
-        .action-pill {
-            width: auto;
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid var(--ice-border);
-            box-shadow: none;
-        }
-        .action-pill.danger { color: #fca5a5; border-color: rgba(248, 113, 113, 0.4); }
-        .action-pill.danger:hover { background: rgba(239, 68, 68, 0.25); }
-
-        .messages-box {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        function showAuthMsg(msg, color) {
+            const box = $('auth-error');
+            if (!box) return;
+            box.style.color = color || '#fca5a5';
+            box.textContent = msg;
         }
 
-        .msg {
-            max-width: 72%;
-            padding: 10px 15px;
-            border-radius: 18px;
-            font-size: 0.95rem;
-            line-height: 1.45;
-            position: relative;
-            backdrop-filter: blur(8px);
+        async function postJSON(path, body) {
+            const r = await fetch(SERVER_URL + path, {
+                method: 'POST',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const text = await r.text();
+            try {
+                return JSON.parse(text);
+            } catch (_) {
+                return { status: 'error', message: 'رد غير متوقع (' + r.status + '): ' + text.slice(0, 120) };
+            }
         }
 
-        .msg.sent {
-            align-self: flex-start;
-            background: linear-gradient(135deg, rgba(2, 132, 199, 0.85), rgba(56, 189, 248, 0.75));
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            border-bottom-right-radius: 4px;
-            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.25);
+        async function getJSON(path) {
+            const r = await fetch(SERVER_URL + path, { cache: 'no-store' });
+            const text = await r.text();
+            return JSON.parse(text);
         }
 
-        .msg.received {
-            align-self: flex-end;
-            background: rgba(255, 255, 255, 0.12);
-            border: 1px solid var(--ice-border);
-            border-bottom-left-radius: 4px;
+        function el(tag, cls, text) {
+            const e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (text !== undefined) e.textContent = text;
+            return e;
         }
 
-        .msg.deleted {
-            font-style: italic;
-            opacity: 0.65;
-            background: rgba(15, 23, 42, 0.5);
+        function paintAvatar(node, name, avatar) {
+            if (!node) return;
+            if (avatar) {
+                node.textContent = '';
+                node.style.backgroundImage = 'url("' + avatar + '")';
+                node.style.backgroundSize = 'cover';
+                node.style.backgroundPosition = 'center';
+            } else {
+                node.style.backgroundImage = '';
+                node.textContent = (name || '?').charAt(0).toUpperCase();
+            }
         }
 
-        .msg-meta {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.72rem;
-            margin-top: 4px;
-            color: rgba(240, 249, 255, 0.85);
+        function makeAvatar(name, avatar, size, zoom) {
+            const a = el('div', 'avatar');
+            a.style.width = a.style.height = size + 'px';
+            a.style.fontSize = Math.round(size * 0.42) + 'px';
+            paintAvatar(a, name, avatar);
+            if (zoom) {
+                a.style.cursor = 'pointer';
+                a.addEventListener('click', e => { e.stopPropagation(); showAvatarBig(name, avatar); });
+            }
+            return a;
         }
 
-        .read-badge { color: #e0f2fe; font-weight: 700; text-shadow: 0 0 6px #fff; }
-
-        .msg-menu-btn {
-            position: absolute;
-            top: 6px;
-            left: 8px;
-            background: rgba(0, 0, 0, 0.25);
-            border: none;
-            color: #fff;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            font-size: 0.75rem;
-            padding: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            box-shadow: none;
+        function showAvatarBig(name, avatar) {
+            const box = $('avatar-viewer-img');
+            const s = Math.min(320, window.innerWidth - 60);
+            box.style.width = box.style.height = s + 'px';
+            box.style.fontSize = Math.round(s * 0.4) + 'px';
+            paintAvatar(box, name, avatar);
+            $('avatar-viewer-name').textContent = name;
+            $('avatar-viewer').style.display = 'flex';
         }
 
-        .msg.sent:not(.deleted):hover .msg-menu-btn { display: flex; }
+        (function snow() {
+            const box = $('snow-container');
+            if (!box) return;
+            for (let i = 0; i < 35; i++) {
+                const s = el('div', 'snowflake', '❄');
+                s.style.left = Math.random() * 100 + '%';
+                s.style.fontSize = (0.6 + Math.random() * 1.1) + 'rem';
+                s.style.animationDuration = (7 + Math.random() * 11) + 's';
+                s.style.animationDelay = (-Math.random() * 15) + 's';
+                box.appendChild(s);
+            }
+        })();
 
-        .msg-dropdown {
-            position: absolute;
-            top: 30px;
-            left: 8px;
-            background: rgba(9, 21, 38, 0.95);
-            border: 1px solid var(--ice-border);
-            border-radius: 12px;
-            padding: 4px;
-            z-index: 20;
-            min-width: 135px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+        async function login() {
+            const u = ($('username-input').value || '').trim();
+            const p = ($('password-input').value || '').trim();
+            const btn = $('login-btn');
+            showAuthMsg('', '');
+            if (!u || !p) {
+                showAuthMsg('يرجى إدخال اسم المستخدم وكلمة المرور');
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'جارٍ الدخول... ⏳';
+            const timer = setTimeout(() => {
+                showAuthMsg('السيرفر يستيقظ، انتظر قليلاً...', '#7dd3fc');
+            }, 3500);
+            try {
+                const d = await postJSON('/auth', { username: u, password: p });
+                if (d.status !== 'success') {
+                    showAuthMsg(d.message || 'تعذّر تسجيل الدخول');
+                    return;
+                }
+                currentUser = d.username;
+                currentAvatar = d.avatar || '';
+                try { localStorage.setItem('icy_last_user', currentUser); } catch (_) {}
+                enterApp();
+            } catch (e) {
+                showAuthMsg('خطأ اتصال: ' + (e && e.message ? e.message : String(e)));
+            } finally {
+                clearTimeout(timer);
+                btn.disabled = false;
+                btn.textContent = 'دخول ❄️';
+            }
         }
 
-        .msg-dropdown div {
-            padding: 7px 10px;
-            font-size: 0.82rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .msg-dropdown div:hover { background: rgba(56, 189, 248, 0.25); }
-
-        .chat-input-area {
-            padding: 14px 20px;
-            border-top: 1px solid var(--ice-border);
-            display: flex;
-            gap: 10px;
-            background: rgba(9, 21, 38, 0.5);
-        }
-        .chat-input-area input { margin-bottom: 0; }
-        .chat-input-area button { width: 110px; }
-
-        .section-title {
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            margin: 8px 4px;
-            font-weight: 700;
+        function logout() {
+            if (socket) { try { socket.disconnect(); } catch (_) {} }
+            socket = null;
+            currentUser = ""; activeFriend = ""; messagesCache = [];
+            viewedStatuses.clear();
+            chatHistoryPushed = false;
+            $('app-screen').classList.remove('in-chat');$('app-screen').style.display = 'none';
+            $('auth-screen').style.display = 'block';$('password-input').value = '';
+            resetChatArea();
         }
 
-        @media (hover: none) {
-            .msg.sent:not(.deleted) .msg-menu-btn { display: flex; }
+        function enterApp() {
+            $('auth-screen').style.display = 'none';$('app-screen').classList.remove('in-chat');
+            $('app-screen').style.display = 'flex';$('current-user-badge').textContent = currentUser;
+            paintAvatar($('my-header-avatar'), currentUser, currentAvatar);
+            paintAvatar($('settings-avatar-preview'), currentUser, currentAvatar);$('new-username-input').value = currentUser;
+            connectSocket();
+            switchTab('friends');
+            loadFriends();
         }
 
-        @media (max-width: 900px) {
-            .sidebar { width: 100%; border-left: none; }
-            .chat-area { display: none; width: 100%; }
-            #app-screen.in-chat .sidebar { display: none; }
-            #app-screen.in-chat .chat-area { display: flex; }
-            .back-btn { display: flex; }
-            .msg { max-width: 82%; }
-            .chat-input-area { padding: 10px 12px; }
-            .chat-input-area button { width: 96px; }
-            .messages-box { padding: 14px; }
+        function connectSocket() {
+            if (socket) { try { socket.disconnect(); } catch (_) {} }
+            if (typeof io === 'undefined') { socket = null; return; }
+            socket = io(SERVER_URL, { transports: ['polling', 'websocket'], reconnection: true });
+            socket.on('connect', () => socket.emit('join', { username: currentUser }));
+
+            socket.on('receive_message', m => {
+                const involvesActive = activeFriend && (m.sender === activeFriend || m.receiver === activeFriend);
+                if (involvesActive) {
+                    if (!messagesCache.some(x => x.id === m.id)) messagesCache.push(m);
+                    renderMessages(true);
+                    if (m.sender === activeFriend) {
+                        socket.emit('mark_read', { sender: activeFriend, receiver: currentUser });
+                    }
+                } else if (m.receiver === currentUser) {
+                    unread[m.sender] = true;
+                    if (!friendsCache.some(f => f.username === m.sender)) loadFriends();
+                    else renderFriends();
+                }
+            });
+
+            socket.on('messages_read', d => {
+                if (d.by === activeFriend) {
+                    messagesCache.forEach(m => { if (m.sender === currentUser) m.is_read = 1; });
+                    renderMessages(false);
+                }
+            });
+
+            socket.on('message_updated', d => {
+                const m = messagesCache.find(x => x.id === d.id);
+                if (m) { Object.assign(m, d); renderMessages(false); }
+            });
+
+            socket.on('message_removed', d => {
+                messagesCache = messagesCache.filter(x => x.id !== d.id);
+                renderMessages(false);
+            });
         }
-    </style>
-</head>
-<body>
 
-    <div class="snowflakes" id="snow-container"></div>
+        function switchTab(name) {
+            ['friends', 'statuses', 'settings'].forEach(t => {
+                $('tab-' + t).style.display = (t === name) ? 'flex' : 'none';$('nav-' + t).classList.toggle('active', t === name);
+            });
+            if (name === 'friends') loadFriends();
+            if (name === 'statuses') loadStatuses();
+        }
 
-    <div id="auth-screen">
-        <div class="logo">قلب جليدي 💙❄️</div>
-        <p class="subtitle">أدخل اسم المستخدم وكلمة المرور للدخول إلى عالم الجليد</p>
-        <input type="text" id="username-input" placeholder="اسم المستخدم...">
-        <input type="password" id="password-input" placeholder="كلمة المرور...">
-        <button id="login-btn" onclick="login()">دخول ❄️</button>
-        <p id="auth-error" style="color: #fca5a5; margin-top: 12px; font-size: 0.9rem;"></p>
-        <p style="margin-top: 10px; font-size: 0.7rem; opacity: 0.5;">نسخة 3.1</p>
-    </div>
+        async function loadFriends() {
+            try {
+                const d = await getJSON('/friends?user=' + encodeURIComponent(currentUser));
+                friendsCache = d.friends || [];
+                renderFriends();
+            } catch (_) {}
+        }
 
-    <div id="app-screen">
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <span style="font-weight: 800; font-size: 1.1rem;">قلب جليدي 💙</span>
-                <div class="user-profile-mini">
-                    <span id="current-user-badge" style="color: var(--ice-cyan); font-size: 0.9rem; font-weight: 600;"></span>
-                    <div id="my-header-avatar" class="avatar" style="width: 34px; height: 34px; font-size: 0.85rem; cursor: pointer;" onclick="showAvatarBig(currentUser, currentAvatar)"></div>
-                </div>
-            </div>
+        function renderFriends() {
+            const box = $('friends-list');
+            box.textContent = '';
+            if (!friendsCache.length) {
+                box.appendChild(el('div', 'section-title', 'ما عندك أصدقاء بعد. ابحث عن اسم وأضفه ❄️'));
+                return;
+            }
+            friendsCache.forEach(f => {
+                const row = el('div', 'user-item' + (f.username === activeFriend ? ' active' : ''));
+                const left = el('div');
+                left.style.cssText = 'display:flex;align-items:center;gap:10px;min-width:0';
+                left.appendChild(makeAvatar(f.username, f.avatar, 38));
+                left.appendChild(el('span', '', f.username));
+                row.appendChild(left);
+                if (unread[f.username]) {
+                    const dot = el('span');
+                    dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#38bdf8;box-shadow:0 0 8px #38bdf8;flex-shrink:0';
+                    row.appendChild(dot);
+                }
+                row.addEventListener('click', () => openChat(f.username));
+                box.appendChild(row);
+            });
+        }
 
-            <div id="tab-friends" class="tab-content">
-                <div class="search-box">
-                    <input type="text" id="search-input" placeholder="ابحث عن صديق بالاسم...">
-                    <button onclick="searchUsers()">بحث</button>
-                </div>
-                <div class="list-container">
-                    <div id="search-results-section" style="display: none;">
-                        <div class="section-title">نتائج البحث:</div>
-                        <div id="search-results"></div>
-                    </div>
-                    <div class="section-title">الأصدقاء:</div>
-                    <div id="friends-list"></div>
-                </div>
-            </div>
+        async function searchUsers() {
+            const q = $('search-input').value.trim();
+            const section = $('search-results-section');
+            const box = $('search-results');
+            if (!q) { section.style.display = 'none'; return; }
+            try {
+                const d = await getJSON('/search?q=' + encodeURIComponent(q) + '&user=' + encodeURIComponent(currentUser));
+                box.textContent = '';
+                section.style.display = 'block';
+                if (!d.users.length) { box.appendChild(el('div', 'section-title', 'لا توجد نتائج')); return; }
+                d.users.forEach(u => {
+                    const name = u.username;
+                    const row = el('div', 'user-item');
+                    row.style.cursor = 'default';
+                    const who = el('div');
+                    who.style.cssText = 'display:flex;align-items:center;gap:10px;min-width:0';
+                    who.appendChild(makeAvatar(name, u.avatar, 38, true));
+                    who.appendChild(el('span', '', name));
+                    row.appendChild(who);
+                    const isFriend = friendsCache.some(f => f.username === name);
+                    const b = el('button', 'add-btn', isFriend ? 'صديق ✓' : 'إضافة ➕');
+                    if (isFriend) { b.disabled = true; b.style.opacity = '0.6'; }
+                    b.addEventListener('click', () => addFriend(name));
+                    row.appendChild(b);
+                    box.appendChild(row);
+                });
+            } catch (_) {}
+        }
 
-            <div id="tab-statuses" class="tab-content" style="display: none;">
-                <div class="list-container">
-                    <div class="section-title">أضف حالة نصية (تختفي بعد 24 ساعة) ❄️</div>
-                    <textarea id="status-input" rows="2" placeholder="اكتب حالتك الجليدية هنا..."></textarea>
-                    <div class="color-picker-row">
-                        <div class="color-dot selected" style="background: linear-gradient(135deg, #0284c7, #1e3a8a);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #0284c7, #1e3a8a)')"></div>
-                        <div class="color-dot" style="background: linear-gradient(135deg, #0f766e, #0e7490);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #0f766e, #0e7490)')"></div>
-                        <div class="color-dot" style="background: linear-gradient(135deg, #4338ca, #312e81);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #4338ca, #312e81)')"></div>
-                        <div class="color-dot" style="background: linear-gradient(135deg, #1e293b, #334155);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #1e293b, #334155)')"></div>
-                    </div>
-                    <button onclick="postStatus()" style="margin-bottom: 16px;">نشر الحالة ✨</button>
-                    <div class="section-title">حالات الجميع:</div>
-                    <div id="statuses-list"></div>
-                </div>
-            </div>
+        async function addFriend(name) {
+            const d = await postJSON('/add_friend', { user: currentUser, friend: name });
+            if (d.status === 'success') {
+                $('search-input').value = '';$('search-results-section').style.display = 'none';
+                loadFriends();
+            }
+        }
 
-            <div id="tab-settings" class="tab-content" style="display: none;">
-                <div class="list-container">
-                    <div class="section-title">إعدادات الحساب الجليدي ⚙️</div>
-                    <div style="text-align: center; margin: 15px 0;">
-                        <div id="settings-avatar-preview" class="avatar" style="width: 80px; height: 80px; font-size: 1.8rem; margin: 0 auto 10px;"></div>
-                        <label style="display: inline-block; padding: 6px 14px; background: rgba(56, 189, 248, 0.2); border: 1px solid var(--ice-border); border-radius: 10px; cursor: pointer; font-size: 0.85rem;">
-                            تغيير صورة الحساب 📷
-                            <input type="file" id="avatar-file-input" accept="image/*" style="display: none;" onchange="previewAvatar(event)">
-                        </label>
-                    </div>
-                    <div class="section-title">تغيير اسم المستخدم:</div>
-                    <input type="text" id="new-username-input" placeholder="اسم المستخدم الجديد...">
-                    <button onclick="saveSettings()">حفظ التعديلات 💾</button>
-                    <button onclick="logout()" style="margin-top: 10px; background: rgba(255,255,255,0.08);">تسجيل الخروج 🚪</button>
-                    <p id="settings-msg" style="margin-top: 10px; font-
+        function resetChatArea() {
+            $('chat-header').textContent = '';$('chat-header').appendChild(el('span', '', 'اختر صديقاً لبدء المحادثة ❄️'));
+            $('messages-box').textContent = '';
+            $('input-area').style.display = 'none';$('blocked-banner').style.display = 'none';
+        }
+
+        async function openChat(friend) {
+            activeFriend = friend;
+            unread[friend] = false;
+            messagesCache = [];
+            $('messages-box').textContent = '';$('app-screen').classList.add('in-chat');
+            if (!chatHistoryPushed) {
+                history.pushState({ chat: 1 }, '');
+                chatHistoryPushed = true;
+            }
+            renderFriends();
+            renderChatHeader();
+            await loadMessages();
+            if (window.innerWidth > 900) $('msg-input').focus();
+        }
+
+        function closeChat() {
+            activeFriend = '';
+            messagesCache = [];
+            blockedByMe = blockedMe = false;
+            $('app-screen').classList.remove('in-chat');
+            resetChatArea();
+            renderFriends();
+            loadFriends();
+        }
+
+        function backToList() {
+            if (chatHistoryPushed) history.back();
+            else closeChat();
+        }
+
+        window.addEventListener('popstate', () => {
+            chatHistoryPushed = false;
+            if (activeFriend) closeChat();
+        });
+
+        function renderChatHeader() {
+            const h = $('chat-header');
+            h.textContent = '';
+
+            const back = el('button', 'back-btn', '→');
+            back.title = 'رجوع';
+            back.addEventListener('click', backToList);
+            h.appendChild(back);
+
+            const f = friendsCache.find(x => x.username === activeFriend) || {};
+            const who = el('div', 'chat-who');
+            who.appendChild(makeAvatar(activeFriend, f.avatar, 38, true));
+            who.appendChild(el('strong', '', activeFriend));
+            h.appendChild(who);
+
+            const actions = el('div', 'chat-actions');
+            const clear = el('button', 'action-pill', 'مسح المحادثة 🧹');
+    
