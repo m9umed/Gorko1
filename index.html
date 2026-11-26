@@ -104,6 +104,8 @@ nav span{font-size:10px}
 </style>
 </head>
 <body>
+<script>window.onerror=function(m,s,l){var d=document.createElement('pre');d.style.cssText='color:#ff5d73;padding:16px;white-space:pre-wrap;direction:ltr;position:relative;z-index:99';d.textContent='خطأ: '+m+' (سطر '+l+')';document.body.appendChild(d)}</script>
+<div id="ld" style="min-height:100vh;display:grid;place-items:center;text-align:center"><div><h1 class="logo" style="font-size:38px">RAMALES</h1><p class="mu">جاري التحميل...</p></div></div>
 <div id="auth" hidden>
  <div class="box">
   <h1>RAMALES</h1><p class="mu">شارك لحظاتك مع أصدقائك</p>
@@ -151,9 +153,9 @@ async function sub(){const e=$('#er');e.textContent='';try{let d;
  else d=await api('/login',{method:'POST',json:{user:$('#un').value,password:$('#pw').value}});
  T=localStorage.t=d.token;boot()}catch(x){e.textContent=x.message}}
 function out(){localStorage.removeItem('t');location.reload()}
-async function boot(){if(!T){$('#auth').hidden=false;return}
+async function boot(){if(!T){$('#ld').hidden=true;$('#auth').hidden=false;return}
  try{ME=await api('/me')}catch{return out()}
- $('#auth').hidden=true;$('#app').hidden=false;$('#th').textContent=localStorage.th=='light'?'☀️':'🌙';const hp=location.hash.match(/^#post(\d+)/);hp?go('post',+hp[1]):go('home');badges();setInterval(badges,5000)}
+ $('#ld').hidden=true;$('#auth').hidden=true;$('#app').hidden=false;$('#th').textContent=localStorage.th=='light'?'☀️':'🌙';const hp=location.hash.match(/^#post(\d+)/);hp?go('post',+hp[1]):go('home');badges();setInterval(badges,5000)}
 async function badges(){try{const b=await api('/badges');$('#bn').textContent=b.n||'';$('#bm').textContent=b.m||''}catch{}}
 
 /* ---- views ---- */
@@ -194,7 +196,4 @@ const R={
 async function pub(b){const f=new FormData();f.append('text',$('#pt').value);const x=$('#pf').files[0];if(x)f.append('file',x);b.disabled=true;b.textContent='جاري النشر...';
  try{await api('/posts',{method:'POST',body:f});go('home')}catch(e){alert(e.message);b.disabled=false;b.textContent='نشر'}}
 async function like(id){const d=await api('/like/'+id,{method:'POST'}),b=$('#lk'+id);b.className=d.on?'lk':'';b.innerHTML=(d.on?'❤️':'🤍')+' <span>'+d.n+'</span>'}
-async function dl(id){const b=$('#lk'+id);if(b&&b.className!='lk')like(id);const e=document.createElement('div');e.className='hrt';e.textContent='❤️';$('#p'+id+' .mw').append(e);setTimeout(()=>e.remove(),700)}
-async function sv(id,b){const d=await api('/save/'+id,{method:'POST'});b.textContent=d.on?'🔖':'📑'}
-function sh(id){const u=location.origin+'/#post'+id;navigator.share?navigator.share({url:u}).catch(()=>{}):navigator.clipboard.writeText(u).then(()=>alert('تم نسخ الرابط'))}
-function pm(id){sheet([['✏️ تعديل النص',async()=>{const x=prompt('
+async function dl(id){const b=$('#lk'+id);if(b&&b.classN
