@@ -1,349 +1,200 @@
-import os, re, sqlite3, secrets
-from functools import wraps
-from flask import Flask, request, jsonify, send_from_directory, g
-from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RAMALES</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1321;--c:#162036;--c2:#1f2d4a;--t:#f1f4fb;--m:#8d9bbd;--a:#ffb703;--b:#ff5d73;--g:linear-gradient(135deg,#ffb703,#ff5d73)}
 
-B = os.path.dirname(os.path.abspath(__file__))
-UP = os.path.join(B, 'uploads'); os.makedirs(UP, exist_ok=True)
-DB = os.path.join(B, 'ramales.db')
-app = Flask(__name__, static_folder=None)
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
-NOW = "default (cast(strftime('%s','now') as integer))"
-with sqlite3.connect(DB) as c:
-    c.executescript(f'''
-create table if not exists users(id integer primary key,email text unique,username text unique,pw text,avatar text);
-create table if not exists sessions(token text primary key,uid int);
-create table if not exists posts(id integer primary key,uid int,text text,media text,mtype text,ts int {NOW});
-create table if not exists likes(pid int,uid int,primary key(pid,uid));
-create table if not exists comments(id integer primary key,pid int,uid int,text text,ts int {NOW});
-create table if not exists follows(a int,b int,primary key(a,b));
-create table if not exists notifs(id integer primary key,uid int,kind text,frm int,seen int default 0,ts int {NOW});
-create table if not exists msgs(id integer primary key,a int,b int,text text,media text,mtype text,edited int default 0,deleted int default 0,seen int default 0,ts int {NOW});
-create table if not exists blocks(a int,b int,primary key(a,b));
-create table if not exists chatclr(uid int,o int,mid int,primary key(uid,o));''')
+:root[data-th=light]{--bg:#f3f5fa;--c:#fff;--c2:#e7ebf4;--t:#151a2a;--m:#66718f}
+*{box-sizing:border-box;margin:0;font-family:Cairo,system-ui,Tahoma,sans-serif}
+body{background:var(--bg);color:var(--t);min-height:100vh}
+[hidden]{display:none!important}
+button,input,textarea{font:inherit;color:inherit;border:0;outline:0}
+button{cursor:pointer;background:none}
+input,textarea{background:var(--c2);border-radius:14px;padding:12px 14px;width:100%}
+.mu{color:var(--m)}
+#auth{min-height:100vh;display:grid;place-items:center;padding:20px}
+.box{width:100%;max-width:400px;background:var(--c);border-radius:26px;padding:28px;display:grid;gap:12px;text-align:center}
+.box h1,.logo{font-weight:800;letter-spacing:2px;background:var(--g);-webkit-background-clip:text;background-clip:text;color:transparent}
+.box h1{font-size:38px}
+.tabs{display:flex;background:var(--c2);border-radius:14px;padding:4px}
+.tabs button{flex:1;padding:9px;border-radius:11px;color:var(--m)}
+.tabs .on{background:var(--g);color:#1a1200;font-weight:600}
+.avp{width:92px;height:92px;border-radius:50%;background:var(--c2);margin:auto;display:grid;place-items:center;overflow:hidden;cursor:pointer;font-size:28px;position:relative}
+.avp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.btn{background:var(--g);color:#1a1200;font-weight:800;padding:12px 20px;border-radius:14px}
+.btn2{background:var(--c2);padding:12px 20px;border-radius:14px}
+.er{color:var(--b);min-height:20px;font-size:14px}
+header{position:fixed;top:0;inset-inline:0;height:56px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:5;max-width:600px;margin:auto}
+.logo{font-size:24px}
+header div{display:flex;gap:6px}
+header button{font-size:22px;position:relative;padding:6px 8px}
+i.bd,header i{background:var(--b);color:#fff;font-style:normal;font-size:11px;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
+header i{position:absolute;top:0;inset-inline-start:0}
+i:empty{display:none}
+main{max-width:600px;margin:auto;padding:68px 12px 90px}
+nav{position:fixed;bottom:0;inset-inline:0;max-width:600px;margin:auto;background:color-mix(in srgb,var(--c) 95%,transparent);backdrop-filter:blur(10px);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));border-radius:22px 22px 0 0;z-index:5}
+nav button{flex:1;display:grid;justify-items:center;font-size:21px;color:var(--m);padding:4px}
+nav span{font-size:11px}
+nav .on{color:var(--a)}
+nav button[data-t=add]{font-size:26px;color:#1a1200}
+nav button[data-t=add] b{background:var(--g);width:46px;height:46px;border-radius:16px;display:grid;place-items:center;margin-top:-18px;font-weight:600}
+.card{background:var(--c);border-radius:20px;padding:14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px;cursor:pointer}
+.row small{margin-inline-start:auto}
+.fx{flex:1}
+.av{width:42px;height:42px;border-radius:50%;object-fit:cover;background:var(--g);color:#1a1200;display:grid;place-items:center;font-weight:800;flex:none}
+.av.big{width:96px;height:96px;font-size:36px}
+.tx{margin:10px 0;white-space:pre-wrap;line-height:1.7}
+.md{width:100%;max-height:70vh;border-radius:14px;margin-top:8px;background:#000;object-fit:contain;display:block}
+audio{width:100%;max-width:240px}
+.acts{display:flex;gap:18px;margin-top:10px}
+.acts button{font-size:16px;color:var(--m)}
+.acts .lk{color:var(--b)}
+.cms p{margin-top:8px;font-size:14px}
+.in{display:flex;gap:8px;margin-top:10px}
+.in button{color:var(--a);font-weight:600}
+.ct{text-align:center;display:grid;gap:10px}
+.ct div{display:flex;gap:10px}
+.ct a{flex:1;padding:10px;border-radius:14px;color:#fff;text-decoration:none;font-weight:600}
+.wa{background:#1fa855}.ig{background:linear-gradient(45deg,#f9a03f,#e1306c,#833ab4)}
+textarea{min-height:120px;resize:vertical;margin:10px 0}
+.fl{display:block;background:var(--c2);padding:12px;border-radius:14px;margin-bottom:12px;cursor:pointer}
+.fl::after{content:attr(data-n);color:var(--a);margin-inline-start:8px}
+.pf{text-align:center;display:grid;gap:10px;justify-items:center}
+.st{display:flex;gap:22px;color:var(--m)}.st b{color:var(--t);display:block;font-size:18px}
+.row2{display:flex;gap:8px}
+.ttl{margin:6px 4px 12px}
+.ch{display:grid;gap:8px}
+.chh{position:sticky;top:56px;z-index:3}
+#ms{display:grid;gap:8px;padding-bottom:70px}
+.m{max-width:78%;background:var(--c);padding:10px 14px;border-radius:20px 20px 20px 6px;justify-self:start;display:grid;gap:4px;box-shadow:0 1px 3px #0003}
+.m.me{background:var(--g);color:#1a1200;justify-self:end;border-radius:20px 20px 6px 20px}
+.m small{font-size:11px;opacity:.7}
+.m u{text-decoration:none;cursor:pointer;float:left}
+.bar{position:fixed;bottom:0;inset-inline:0;max-width:600px;margin:auto;background:var(--c);padding:8px 8px calc(8px + env(safe-area-inset-bottom));display:flex;gap:6px;align-items:center;z-index:6}
+.bar button,.bar label{font-size:22px;padding:4px 6px;cursor:pointer}
+.sh{position:fixed;inset:0;background:#000a;z-index:9;display:flex;align-items:flex-end}
+.sh div{background:var(--c);width:100%;max-width:600px;margin:auto;border-radius:22px 22px 0 0;padding:12px;display:grid;gap:4px}
+.sh button{padding:14px;border-radius:12px;background:var(--c2)}
+nav span{font-size:10px}
+.bar input{border-radius:24px}
+.bar .snd{background:var(--g);color:#1a1200;border-radius:50%;width:42px;height:42px;display:grid;place-items:center;font-size:18px;padding:0}
+.sb{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 14px}
+.sc{display:grid;justify-items:center;gap:4px;flex:none;width:68px;cursor:pointer}
+.sc small{font-size:11px;max-width:68px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ring{padding:3px;border-radius:50%;background:var(--g)}.ring.no{background:var(--c2)}
+.ring .av{border:3px solid var(--bg);width:56px;height:56px}
+#sv{position:fixed;inset:0;background:#000;z-index:20;display:grid;place-items:center;color:#fff}
+#sv img,#sv video{max-width:100%;max-height:100vh}
+.pg{position:absolute;top:8px;inset-inline:8px;display:flex;gap:4px;z-index:2}
+.pg i{flex:1;height:3px;background:#fff4;border-radius:2px;overflow:hidden}.pg i.d{background:#fff}
+.pg b{display:block;height:100%;background:#fff;width:0}.pg b.run{animation:pr 5s linear forwards}
+@keyframes pr{to{width:100%}}
+.sh2{position:absolute;top:18px;inset-inline:12px;z-index:2}.sh2 button{color:#fff;font-size:20px}
+.mw{position:relative}.hrt{position:absolute;inset:0;display:grid;place-items:center;font-size:90px;animation:hp .7s;pointer-events:none}
+@keyframes hp{0%{transform:scale(0);opacity:1}60%{transform:scale(1.2)}100%{opacity:0}}
+.tg{color:var(--a);cursor:pointer}
+.gr{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:12px}
+.gr div{aspect-ratio:1;background:var(--c2);overflow:hidden;cursor:pointer;display:grid;place-items:center;font-size:12px;padding:4px}
+.gr img,.gr video{width:100%;height:100%;object-fit:cover}
+</style>
+</head>
+<body>
+<div id="auth" hidden>
+ <div class="box">
+  <h1>RAMALES</h1><p class="mu">شارك لحظاتك مع أصدقائك</p>
+  <div class="tabs"><button id="tl" class="on" onclick="tab(0)">تسجيل الدخول</button><button id="tr" onclick="tab(1)">إنشاء حساب</button></div>
+  <label class="avp" id="avl" hidden>📷<img id="avp" hidden><input type="file" id="aa" accept="image/*" hidden onchange="pv()"></label>
+  <input id="em" type="email" placeholder="الإيميل" hidden>
+  <input id="un" placeholder="اسم المستخدم أو الإيميل">
+  <input id="pw" type="password" placeholder="كلمة المرور">
+  <input id="pw2" type="password" placeholder="تأكيد كلمة المرور" hidden>
+  <button class="btn" onclick="sub()">متابعة</button>
+  <p id="er" class="er"></p>
+ </div>
+</div>
+<div id="app" hidden>
+ <header><b class="logo">RAMALES</b>
+  <div><button id="th" onclick="theme()">🌙</button><button onclick="go('notifs')">🔔<i id="bn"></i></button><button onclick="go('chats')">💬<i id="bm"></i></button></div></header>
+ <main id="v"></main>
+ <nav>
+  <button data-t="home" onclick="go('home')">🏠<span>الرئيسية</span></button>
+  <button data-t="add" onclick="go('add')"><b>＋</b></button>
+  <button data-t="videos" onclick="go('videos')">🎬<span>فيديوهات</span></button>
+  <button data-t="search" onclick="go('search')">🔍<span>بحث</span></button>
+  <button data-t="me" onclick="go('profile',ME.username)">👤<span>حسابي</span></button>
+ </nav>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+document.documentElement.dataset.th=localStorage.th||'dark';
+function theme(){const l=document.documentElement.dataset.th!='light';document.documentElement.dataset.th=localStorage.th=l?'light':'dark';$('#th').textContent=l?'☀️':'🌙'}
+let T=localStorage.t,ME,V='home',A,CH=0,CU,poll,reg=0,mr,ST=[],EXH='';
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=async(p,o={})=>{o.headers={'X-Token':T||''};if(o.json){o.headers['Content-Type']='application/json';o.body=JSON.stringify(o.json)}
+ const r=await fetch('/api'+p,o),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'حدث خطأ');return d};
+const ago=t=>{const s=Date.now()/1000-t;return s<60?'الآن':s<3600?Math.floor(s/60)+' د':s<86400?Math.floor(s/3600)+' س':Math.floor(s/86400)+' يوم'};
+const av=(u,c='')=>u.avatar?`<img class="av ${c}" src="${u.avatar}">`:`<div class="av ${c}">${esc(u.username[0])}</div>`;
+const media=(m,t)=>!m?'':t=='image'?`<img class="md" src="${m}">`:t=='video'?`<video class="md" src="${m}" controls playsinline></video>`:t=='audio'?`<audio src="${m}" controls></audio>`:`<a href="${m}" target="_blank">📎 ملف</a>`;
 
+/* ---- auth ---- */
+function tab(r){reg=r;$('#tl').className=r?'':'on';$('#tr').className=r?'on':'';['#avl','#em','#pw2'].forEach(s=>$(s).hidden=!r);$('#un').placeholder=r?'اسم المستخدم':'اسم المستخدم أو الإيميل';$('#er').textContent=''}
+function pv(){const f=$('#aa').files[0];if(f){$('#avp').src=URL.createObjectURL(f);$('#avp').hidden=false}}
+async function sub(){const e=$('#er');e.textContent='';try{let d;
+ if(reg){if($('#pw').value!=$('#pw2').value)return e.textContent='كلمتا المرور غير متطابقتين';
+  const f=new FormData();f.append('email',$('#em').value);f.append('username',$('#un').value);f.append('password',$('#pw').value);if($('#aa').files[0])f.append('avatar',$('#aa').files[0]);
+  d=await api('/register',{method:'POST',body:f})}
+ else d=await api('/login',{method:'POST',json:{user:$('#un').value,password:$('#pw').value}});
+ T=localStorage.t=d.token;boot()}catch(x){e.textContent=x.message}}
+function out(){localStorage.removeItem('t');location.reload()}
+async function boot(){if(!T){$('#auth').hidden=false;return}
+ try{ME=await api('/me')}catch{return out()}
+ $('#auth').hidden=true;$('#app').hidden=false;$('#th').textContent=localStorage.th=='light'?'☀️':'🌙';const hp=location.hash.match(/^#post(\d+)/);hp?go('post',+hp[1]):go('home');badges();setInterval(badges,5000)}
+async function badges(){try{const b=await api('/badges');$('#bn').textContent=b.n||'';$('#bm').textContent=b.m||''}catch{}}
 
-with sqlite3.connect(DB) as c:
-    c.executescript(f'''create table if not exists stories(id integer primary key,uid int,media text,mtype text,ts int {NOW});
-create table if not exists saves(pid int,uid int,primary key(pid,uid));''')
-    try: c.execute('alter table users add column bio text')
-    except sqlite3.OperationalError: pass
-
-
-def db():
-    if 'd' not in g:
-        g.d = sqlite3.connect(DB); g.d.row_factory = sqlite3.Row
-    return g.d
-
-@app.teardown_appcontext
-def close(e):
-    d = g.pop('d', None)
-    if d: d.close()
-
-def q(s, a=(), one=False):
-    r = db().execute(s, a).fetchall()
-    return (r[0] if r else None) if one else r
-
-def ex(s, a=()):
-    c = db().execute(s, a); db().commit(); return c.lastrowid
-
-def auth(f):
-    @wraps(f)
-    def w(*a, **k):
-        r = q('select uid from sessions where token=?', (request.headers.get('X-Token', ''),), True)
-        if not r: return jsonify(error='سجّل الدخول أولاً'), 401
-        g.uid = r['uid']
-        return f(*a, **k)
-    return w
-
-def err(m, c=400): return jsonify(error=m), c
-def U(i):
-    r = q('select id,username,avatar from users where id=?', (i,), True)
-    return dict(r) if r else None
-def fo(a, b): return bool(q('select 1 from follows where a=? and b=?', (a, b), True))
-def mutual(a, b): return fo(a, b) and fo(b, a)
-def blk(a, b): return bool(q('select 1 from blocks where (a=? and b=?) or (a=? and b=?)', (a, b, b, a), True))
-def clr(o):
-    c = q('select mid from chatclr where uid=? and o=?', (g.uid, o), True)
-    return c['mid'] if c else 0
-def mk(i):
-    t = secrets.token_hex(24); ex('insert into sessions values(?,?)', (t, i)); return t
-
-def save(f):
-    if not f or not f.filename: return None, None
-    ext = os.path.splitext(secure_filename(f.filename))[1].lower() or '.bin'
-    n = secrets.token_hex(8) + ext
-    f.save(os.path.join(UP, n))
-    m = (f.mimetype or '').split('/')[0]
-    return '/uploads/' + n, (m if m in ('image', 'video', 'audio') else 'file')
-
-
-@app.get('/')
-def index(): return send_from_directory(B, 'index.html')
-
-@app.get('/uploads/<path:n>')
-def uploads(n): return send_from_directory(UP, n)
-
-@app.post('/api/register')
-def register():
-    f = request.form
-    e, n, p = f.get('email', '').strip().lower(), f.get('username', '').strip(), f.get('password', '')
-    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', e): return err('الإيميل غير صحيح')
-    if not re.match(r'^[\w\u0600-\u06FF.]{3,20}$', n): return err('اسم المستخدم من 3 إلى 20 حرف بدون مسافات')
-    if len(p) < 6: return err('كلمة المرور 6 أحرف على الأقل')
-    if q('select 1 from users where email=? or username=?', (e, n), True): return err('الإيميل أو اسم المستخدم مستخدم من قبل')
-    a, t = save(request.files.get('avatar'))
-    if a and t != 'image': return err('صورة الحساب لازم تكون صورة')
-    i = ex('insert into users(email,username,pw,avatar) values(?,?,?,?)', (e, n, generate_password_hash(p), a))
-    return jsonify(token=mk(i))
-
-@app.post('/api/login')
-def login():
-    d = request.get_json(silent=True) or {}
-    x = d.get('user', '').strip().lower()
-    r = q('select * from users where lower(username)=? or email=?', (x, x), True)
-    if not r or not check_password_hash(r['pw'], d.get('password', '')): return err('بيانات الدخول غير صحيحة', 401)
-    return jsonify(token=mk(r['id']))
-
-@app.get('/api/me')
-@auth
-def me(): return jsonify(U(g.uid))
-
-@app.get('/api/uid/<int:i>')
-@auth
-def uid(i):
-    u = U(i)
-    if not u: return err('غير موجود', 404)
-    u['blocked'] = bool(q('select 1 from blocks where a=? and b=?', (g.uid, i), True))
-    return jsonify(u)
-
-@app.get('/api/user/<name>')
-@auth
-def user(name):
-    r = q('select id from users where username=?', (name,), True)
-    if not r: return err('المستخدم غير موجود', 404)
-    i = r['id']; u = U(i)
-    c = lambda s: q(s, (i,), True)['c']
-    u['bio'] = q('select bio from users where id=?', (i,), True)['bio'] or ''
-    u.update(posts=c('select count(*) c from posts where uid=?'), followers=c('select count(*) c from follows where b=?'),
-             following=c('select count(*) c from follows where a=?'), i_follow=fo(g.uid, i), mutual=mutual(g.uid, i))
-    return jsonify(u)
-
-@app.get('/api/search')
-@auth
-def search():
-    s = request.args.get('q', '').strip().replace('%', '').replace('_', '')
-    if not s: return jsonify([])
-    r = q("select id from users where username like ? and id!=? order by (username like ?) desc, username limit 30",
-          ('%' + s + '%', g.uid, s + '%'))
-    out = []
-    for x in r:
-        u = U(x['id']); u['i_follow'] = fo(g.uid, x['id']); out.append(u)
-    return jsonify(out)
-
-def P(r):
-    c = lambda s: q(s, (r['id'],), True)['c']
-    return dict(id=r['id'], text=r['text'], media=r['media'], mtype=r['mtype'], ts=r['ts'], user=U(r['uid']),
-                likes=c('select count(*) c from likes where pid=?'), comments=c('select count(*) c from comments where pid=?'),
-                liked=bool(q('select 1 from likes where pid=? and uid=?', (r['id'], g.uid), True)),
-                saved=bool(q('select 1 from saves where pid=? and uid=?', (r['id'], g.uid), True)))
-
-@app.get('/api/feed')
-@auth
-def feed():
-    w, a = [], []
-    if request.args.get('type') == 'video': w.append("mtype='video'")
-    if request.args.get('tag'): w.append('text like ?'); a.append('%#' + request.args['tag'] + '%')
-    if request.args.get('user'): w.append('uid=?'); a.append(request.args['user'])
-    s = 'select * from posts' + (' where ' + ' and '.join(w) if w else '') + ' order by id desc limit 60'
-    return jsonify([P(r) for r in q(s, a)])
-
-@app.post('/api/posts')
-@auth
-def post():
-    t = request.form.get('text', '').strip(); m, mt = save(request.files.get('file'))
-    if not t and not m: return err('اكتب شيئاً أو أضف صورة/فيديو')
-    if m and mt not in ('image', 'video'): return err('الملف لازم يكون صورة أو فيديو')
-    ex('insert into posts(uid,text,media,mtype) values(?,?,?,?)', (g.uid, t, m, mt))
-    return jsonify(ok=1)
-
-@app.post('/api/like/<int:p>')
-@auth
-def like(p):
-    if q('select 1 from likes where pid=? and uid=?', (p, g.uid), True):
-        ex('delete from likes where pid=? and uid=?', (p, g.uid)); on = False
-    else:
-        ex('insert into likes values(?,?)', (p, g.uid)); on = True
-    return jsonify(on=on, n=q('select count(*) c from likes where pid=?', (p,), True)['c'])
-
-@app.route('/api/comments/<int:p>', methods=['GET', 'POST'])
-@auth
-def comments(p):
-    if request.method == 'POST':
-        t = (request.get_json(silent=True) or {}).get('text', '').strip()
-        if t: ex('insert into comments(pid,uid,text) values(?,?,?)', (p, g.uid, t[:500]))
-        return jsonify(ok=1)
-    return jsonify([dict(text=r['text'], ts=r['ts'], user=U(r['uid'])) for r in q('select * from comments where pid=? order by id', (p,))])
-
-@app.post('/api/follow/<int:i>')
-@auth
-def follow(i):
-    if i == g.uid: return err('لا يمكنك متابعة نفسك')
-    if fo(g.uid, i):
-        ex('delete from follows where a=? and b=?', (g.uid, i)); on = False
-    else:
-        ex('insert into follows values(?,?)', (g.uid, i)); on = True
-        ex('insert into notifs(uid,kind,frm) values(?,?,?)', (i, 'accept' if fo(i, g.uid) else 'follow', g.uid))
-    return jsonify(on=on)
-
-@app.get('/api/notifs')
-@auth
-def notifs():
-    r = q('select * from notifs where uid=? order by id desc limit 50', (g.uid,))
-    out = [dict(kind=x['kind'], ts=x['ts'], user=U(x['frm'])) for x in r]
-    ex('update notifs set seen=1 where uid=?', (g.uid,))
-    return jsonify(out)
-
-@app.get('/api/badges')
-@auth
-def badges():
-    return jsonify(n=q('select count(*) c from notifs where uid=? and seen=0', (g.uid,), True)['c'],
-                   m=q('select count(*) c from msgs where b=? and seen=0', (g.uid,), True)['c'])
-
-@app.get('/api/chats')
-@auth
-def chats():
-    out = []
-    for x in q('select b from follows f where a=? and exists(select 1 from follows where a=f.b and b=?)', (g.uid, g.uid)):
-        o = x['b']
-        if blk(g.uid, o): continue
-        l = q('select * from msgs where id>? and ((a=? and b=?) or (a=? and b=?)) order by id desc limit 1', (clr(o), g.uid, o, o, g.uid), True)
-        un = q('select count(*) c from msgs where a=? and b=? and seen=0', (o, g.uid), True)['c']
-        last = ''
-        if l: last = '🚫 رسالة محذوفة' if l['deleted'] else (l['text'] or '📎 وسائط')
-        out.append(dict(user=U(o), last=last, unread=un, id=l['id'] if l else 0))
-    out.sort(key=lambda d: -d['id'])
-    return jsonify(out)
-
-@app.get('/api/msg/<int:o>')
-@auth
-def msgs(o):
-    ex('update msgs set seen=1 where a=? and b=?', (o, g.uid))
-    r = q('select * from msgs where id>? and ((a=? and b=?) or (a=? and b=?)) order by id', (clr(o), g.uid, o, o, g.uid))
-    return jsonify([dict(id=x['id'], me=x['a'] == g.uid, text=x['text'], media=x['media'], mtype=x['mtype'],
-                         edited=x['edited'], deleted=x['deleted'], seen=x['seen'], ts=x['ts']) for x in r])
-
-@app.post('/api/msg/<int:o>')
-@auth
-def send(o):
-    if not mutual(g.uid, o) or blk(g.uid, o): return err('لا يمكن إرسال رسائل لهذا المستخدم', 403)
-    m, t = save(request.files.get('file')); tx = request.form.get('text', '').strip()
-    if not tx and not m: return err('الرسالة فارغة')
-    ex('insert into msgs(a,b,text,media,mtype) values(?,?,?,?,?)', (g.uid, o, tx, m, t))
-    return jsonify(ok=1)
-
-@app.post('/api/msg/edit/<int:i>')
-@auth
-def medit(i):
-    t = (request.get_json(silent=True) or {}).get('text', '').strip()
-    if t: ex('update msgs set text=?,edited=1 where id=? and a=? and deleted=0', (t, i, g.uid))
-    return jsonify(ok=1)
-
-@app.post('/api/msg/del/<int:i>')
-@auth
-def mdel(i):
-    ex("update msgs set deleted=1,text='',media=NULL,mtype=NULL where id=? and a=?", (i, g.uid))
-    return jsonify(ok=1)
-
-@app.post('/api/chat/<int:o>/clear')
-@auth
-def clear(o):
-    m = q('select coalesce(max(id),0) m from msgs where (a=? and b=?) or (a=? and b=?)', (g.uid, o, o, g.uid), True)['m']
-    ex('insert or replace into chatclr values(?,?,?)', (g.uid, o, m))
-    return jsonify(ok=1)
-
-@app.post('/api/block/<int:o>')
-@auth
-def block(o):
-    if q('select 1 from blocks where a=? and b=?', (g.uid, o), True):
-        ex('delete from blocks where a=? and b=?', (g.uid, o)); on = False
-    else:
-        ex('insert into blocks values(?,?)', (g.uid, o)); on = True
-    return jsonify(on=on)
-
-
-@app.post('/api/stories')
-@auth
-def story_add():
-    m, t = save(request.files.get('file'))
-    if t not in ('image', 'video'): return err('اختر صورة أو فيديو')
-    ex('insert into stories(uid,media,mtype) values(?,?,?)', (g.uid, m, t)); return jsonify(ok=1)
-
-@app.get('/api/stories')
-@auth
-def stories():
-    r = q("select * from stories where ts>cast(strftime('%s','now') as integer)-86400 and (uid=? or uid in (select b from follows where a=?)) order by id", (g.uid, g.uid))
-    d = {}
-    for x in r: d.setdefault(x['uid'], []).append(dict(media=x['media'], mtype=x['mtype'], ts=x['ts']))
-    out = [dict(user=U(k), items=v) for k, v in d.items()]
-    out.sort(key=lambda s: s['user']['id'] != g.uid)
-    return jsonify(out)
-
-@app.post('/api/save/<int:p>')
-@auth
-def save_post(p):
-    if q('select 1 from saves where pid=? and uid=?', (p, g.uid), True):
-        ex('delete from saves where pid=? and uid=?', (p, g.uid)); on = False
-    else:
-        ex('insert into saves values(?,?)', (p, g.uid)); on = True
-    return jsonify(on=on)
-
-@app.get('/api/saved')
-@auth
-def saved():
-    return jsonify([P(r) for r in q('select p.* from posts p join saves s on s.pid=p.id where s.uid=? order by s.rowid desc', (g.uid,))])
-
-@app.get('/api/post/<int:p>')
-@auth
-def post_get(p):
-    r = q('select * from posts where id=?', (p,), True)
-    return jsonify(P(r)) if r else err('المنشور غير موجود', 404)
-
-@app.post('/api/post/del/<int:p>')
-@auth
-def post_del(p):
-    if q('select 1 from posts where id=? and uid=?', (p, g.uid), True):
-        for t in ('posts where id', 'likes where pid', 'comments where pid', 'saves where pid'): ex(f'delete from {t}=?', (p,))
-    return jsonify(ok=1)
-
-@app.post('/api/post/edit/<int:p>')
-@auth
-def post_edit(p):
-    ex('update posts set text=? where id=? and uid=?', ((request.get_json(silent=True) or {}).get('text', '').strip(), p, g.uid))
-    return jsonify(ok=1)
-
-@app.post('/api/profile')
-@auth
-def profile_upd():
-    ex('update users set bio=? where id=?', (request.form.get('bio', '').strip()[:150], g.uid))
-    a, t = save(request.files.get('avatar'))
-    if a and t == 'image': ex('update users set avatar=? where id=?', (a, g.uid))
-    return jsonify(ok=1)
-
-@app.get('/api/explore')
-@auth
-def explore():
-    r = q("select * from posts where media is not null order by (select count(*) from likes where pid=posts.id) desc, id desc limit 60")
-    return jsonify([dict(id=x['id'], media=x['media'], mtype=x['mtype'], text=x['text']) for x in r])
-
-@app.get('/api/follows/<int:i>/<kind>')
-@auth
-def flist(i, kind):
-    s = 'select a x from follows where b=?' if kind == 'followers' else 'select b x from follows where a=?'
-    return jsonify([dict(U(r['x']), i_follow=fo(g.uid, r['x'])) for r in q(s, (i,))])
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
- 
+/* ---- views ---- */
+async function go(v,a){V=v;A=a;clearInterval(poll);
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==(v=='profile'&&a==ME.username?'me':v)));
+ $('#v').innerHTML='<p class="mu">جاري التحميل...</p>';
+ try{await R[v](a)}catch(e){$('#v').innerHTML=`<p class="mu">${esc(e.message)}</p>`}scrollTo(0,0)}
+const tags=s=>esc(s).replace(/#([\w\u0600-\u06FF]+)/g,'<a class="tg" onclick="event.stopPropagation();go(\'tag\',\'$1\')">#$1</a>').replace(/@([\w\u0600-\u06FF.]+)/g,'<a class="tg" onclick="event.stopPropagation();go(\'profile\',\'$1\')">@$1</a>');
+const gt=p=>`<div onclick="go('post',${p.id})">${p.mtype=='video'?`<video src="${p.media}#t=0.1" muted playsinline></video>`:p.media?`<img src="${p.media}">`:esc((p.text||'').slice(0,60))}</div>`;
+const post=p=>`<article class="card" id="p${p.id}"><div class="row"><div class="row fx" onclick="go('profile','${p.user.username}')">${av(p.user)}<b>${esc(p.user.username)}</b><small class="mu">${ago(p.ts)}</small></div>${p.user.id==ME.id?`<button onclick="pm(${p.id})">⋯</button>`:''}</div>
+${p.text?`<p class="tx">${tags(p.text)}</p>`:''}<div class="mw" ondblclick="dl(${p.id})">${media(p.media,p.mtype)}</div>
+<div class="acts"><button class="${p.liked?'lk':''}" id="lk${p.id}" onclick="like(${p.id})">${p.liked?'❤️':'🤍'} <span>${p.likes}</span></button><button onclick="cm(${p.id})">💬 ${p.comments}</button><button onclick="sh(${p.id})">🔗</button><button style="margin-inline-start:auto" onclick="sv(${p.id},this)">${p.saved?'🔖':'📑'}</button></div><div class="cms" id="c${p.id}"></div></article>`;
+const storyBar=()=>{const mine=ST.find(s=>s.user.id==ME.id);return `<div class="sb"><label class="sc"><div class="ring ${mine?'':'no'}" ${mine?`onclick="event.preventDefault();story(${ST.indexOf(mine)})"`:''}>${av(ME)}</div><small>قصتك ＋</small><input type="file" accept="image/*,video/*" hidden onchange="addst(this)"></label>`+ST.filter(s=>s!=mine).map(s=>`<div class="sc" onclick="story(${ST.indexOf(s)})"><div class="ring">${av(s.user)}</div><small>${esc(s.user.username)}</small></div>`).join('')+'</div>'};
+const R={
+ async home(){const [l,sx]=await Promise.all([api('/feed'),api('/stories')]);ST=sx;$('#v').innerHTML=storyBar()+`<section class="card ct"><b>تواصل مع مطوّري التطبيق RAMALES</b><div><a class="wa" href="https://wa.me/972567101138" target="_blank">واتساب</a><a class="ig" href="https://instagram.com/m_2007d_d" target="_blank">انستجرام</a></div></section>`+(l.map(post).join('')||'<p class="mu">لا يوجد منشورات بعد. كن أول من ينشر!</p>')},
+ add(){$('#v').innerHTML=`<div class="card"><b>منشور جديد</b><textarea id="pt" placeholder="شو في بالك؟"></textarea><label class="fl">📷 إضافة صورة أو فيديو<input type="file" id="pf" accept="image/*,video/*" hidden onchange="this.parentNode.dataset.n=this.files[0]?this.files[0].name:''"></label><button class="btn" onclick="pub(this)">نشر</button></div>`},
+ async search(){const e=await api('/explore');EXH=`<div class="gr">${e.map(gt).join('')}</div>`;$('#v').innerHTML=`<input id="sq" placeholder="ابحث عن شخص أو #هاشتاغ..." oninput="dq()"><div id="sr" style="margin-top:12px">${EXH}</div>`;$('#sq').focus()},
+ async post(id){$('#v').innerHTML=post(await api('/post/'+id))},
+ async tag(t){const l=await api('/feed?tag='+encodeURIComponent(t));$('#v').innerHTML=`<h3 class="ttl">#${esc(t)}</h3>`+(l.map(post).join('')||'<p class="mu">لا توجد منشورات</p>')},
+ async saved(){const l=await api('/saved');$('#v').innerHTML='<h3 class="ttl">المحفوظات 🔖</h3>'+(l.map(post).join('')||'<p class="mu">ما حفظت شي بعد</p>')},
+ async people(a){const [i,k]=a.split(':'),l=await api('/follows/'+i+'/'+k);$('#v').innerHTML=`<h3 class="ttl">${k=='followers'?'المتابعون':'يتابع'}</h3>`+l.map(u=>`<div class="card row" onclick="go('profile','${u.username}')">${av(u)}<b>${esc(u.username)}</b></div>`).join('')},
+ async edit(){const u=await api('/user/'+encodeURIComponent(ME.username));$('#v').innerHTML=`<div class="card pf"><label style="cursor:pointer">${av(ME,'big')}<input type="file" id="ea" accept="image/*" hidden></label><small class="mu">اضغط على الصورة لتغييرها</small><textarea id="eb" maxlength="150" placeholder="نبذة عنك...">${esc(u.bio)}</textarea><button class="btn" onclick="svp()">حفظ</button></div>`},
+ async videos(){const l=await api('/feed?type=video');$('#v').innerHTML=l.map(post).join('')||'<p class="mu">لا يوجد فيديوهات بعد</p>'},
+ async profile(n){const u=await api('/user/'+encodeURIComponent(n)),l=await api('/feed?user='+u.id),m=u.id==ME.id;
+  $('#v').innerHTML=`<div class="card pf">${av(u,'big')}<h2>${esc(u.username)}</h2>${u.bio?`<p class="tx">${tags(u.bio)}</p>`:''}<div class="st"><span><b>${u.posts}</b>منشور</span><span onclick="go('people','${u.id}:followers')"><b>${u.followers}</b>متابع</span><span onclick="go('people','${u.id}:following')"><b>${u.following}</b>يتابع</span></div>
+  ${m?'<div class="row2"><button class="btn2" onclick="go(\'edit\')">تعديل الملف</button><button class="btn2" onclick="go(\'saved\')">🔖 المحفوظات</button><button class="btn2" onclick="out()">خروج</button></div>':`<div class="row2"><button class="btn" onclick="fl(${u.id},'${u.username}')">${u.i_follow?'إلغاء المتابعة':'متابعة'}</button>${u.mutual?`<button class="btn2" onclick="go('chat',${u.id})">مراسلة</button>`:''}</div>`}</div><div class="gr">${l.map(gt).join('')}</div>`+(l.length?'':'<p class="mu">لا يوجد منشورات</p>')},
+ async notifs(){const l=await api('/notifs');$('#v').innerHTML='<h3 class="ttl">الإشعارات</h3>'+(l.map(n=>`<div class="card row" onclick="go('profile','${n.user.username}')">${av(n.user)}<div><b>${esc(n.user.username)}</b> ${n.kind=='follow'?'بدأ بمتابعتك. تابعه بالمقابل لتبدأوا الدردشة':'تابعك بالمقابل، صار بإمكانكم الدردشة 💬'}<br><small class="mu">${ago(n.ts)}</small></div></div>`).join('')||'<p class="mu">لا توجد إشعارات</p>');badges()},
+ async chats(){const l=await api('/chats');$('#v').innerHTML='<h3 class="ttl">الدردشات</h3>'+(l.map(c=>`<div class="card row" onclick="go('chat',${c.user.id})">${av(c.user)}<div class="fx"><b>${esc(c.user.username)}</b><br><small class="mu">${esc(c.last||'ابدأ المحادثة')}</small></div><i class="bd">${c.unread||''}</i></div>`).join('')||'<p class="mu">تابع شخصاً ويتابعك بالمقابل لتظهر الدردشة هنا</p>')},
+ async chat(id){CH=id;CU=await api('/uid/'+id);
+  $('#v').innerHTML=`<div class="ch"><div class="card row chh" onclick="opts()">${av(CU)}<b class="fx">${esc(CU.username)}</b><span class="mu">⋮</span></div><div id="ms"></div></div>
+  <div class="bar"><label>📎<input type="file" id="cf" hidden onchange="sf()"></label><input id="ct" placeholder="اكتب رسالة..." onkeydown="if(event.key=='Enter')st()"><button id="mic" onclick="rec()">🎤</button><button class="snd" onclick="st()">➤</button></div>`;
+  const load=async()=>{if(V!='chat')return;const l=await api('/msg/'+id),b=$('#ms');if(!b)return;const bot=innerHeight+scrollY>=document.body.scrollHeight-120;
+   b.innerHTML=l.map(m=>`<div class="m ${m.me?'me':''}">${m.deleted?'<i>🚫 تم حذف هذه الرسالة</i>':media(m.media,m.mtype)+(m.text?`<span>${esc(m.text)}</span>`:'')}<small>${ago(m.ts)}${m.edited?' · معدّلة':''}${m.me?(m.seen?' ✓✓':' ✓'):''}${m.me&&!m.deleted?` <u onclick="mo(${m.id},${!m.media},this)" data-t="${esc(m.text)}">⋯</u>`:''}</small></div>`).join('')||'<p class="mu">ابدأ المحادثة بإرسال رسالة</p>';
+   if(bot)scrollTo(0,document.body.scrollHeight)};
+  await load();scrollTo(0,document.body.scrollHeight);poll=setInterval(load,3000)}
+};
+/* ---- actions ---- */
+async function pub(b){const f=new FormData();f.append('text',$('#pt').value);const x=$('#pf').files[0];if(x)f.append('file',x);b.disabled=true;b.textContent='جاري النشر...';
+ try{await api('/posts',{method:'POST',body:f});go('home')}catch(e){alert(e.message);b.disabled=false;b.textContent='نشر'}}
+async function like(id){const d=await api('/like/'+id,{method:'POST'}),b=$('#lk'+id);b.className=d.on?'lk':'';b.innerHTML=(d.on?'❤️':'🤍')+' <span>'+d.n+'</span>'}
+async function dl(id){const b=$('#lk'+id);if(b&&b.className!='lk')like(id);const e=document.createElement('div');e.className='hrt';e.textContent='❤️';$('#p'+id+' .mw').append(e);setTimeout(()=>e.remove(),700)}
+async function sv(id,b){const d=await api('/save/'+id,{method:'POST'});b.textContent=d.on?'🔖':'📑'}
+function sh(id){const u=location.origin+'/#post'+id;navigator.share?navigator.share({url:u}).catch(()=>{}):navigator.clipboard.writeText(u).then(()=>alert('تم نسخ الرابط'))}
+function pm(id){sheet([['✏️ تعديل النص',async()=>{const x=prompt('
