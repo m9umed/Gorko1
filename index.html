@@ -1,481 +1,586 @@
-# -*- coding: utf-8 -*-
-"""
-سيرفر قلب جليدي 💙❄️
-التشغيل:   python server.py
-ثم افتح:   http://127.0.0.1:5000
-
-المتطلبات:
-    pip install flask flask-socketio flask-cors simple-websocket
-"""
-import glob
-import html
-import os
-import sqlite3
-import time
-from contextlib import closing
-
-from flask import Flask, Response, jsonify, request
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit, join_room
-from werkzeug.security import check_password_hash, generate_password_hash
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'icy_heart.db')
-PORT = int(os.environ.get('PORT', 5000))
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'icy_heart_secret_2026')
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
-
-
-# ───────────────────────── قاعدة البيانات ─────────────────────────
-
-def db():
-    return sqlite3.connect(DB_PATH, timeout=10)
-
-
-def init_db():
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS users
-                     (username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT '')''')
-        c.execute('''CREATE TABLE IF NOT EXISTS friends
-                     (user1 TEXT, user2 TEXT, UNIQUE(user1, user2))''')
-        c.execute('''CREATE TABLE IF NOT EXISTS blocks
-                     (blocker TEXT, blocked TEXT, UNIQUE(blocker, blocked))''')
-        c.execute('''CREATE TABLE IF NOT EXISTS messages
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      sender TEXT,
-                      receiver TEXT,
-                      text TEXT,
-                      is_read INTEGER DEFAULT 0,
-                      edited INTEGER DEFAULT 0,
-                      deleted_for_all INTEGER DEFAULT 0,
-                      deleted_by_sender INTEGER DEFAULT 0,
-                      deleted_by_receiver INTEGER DEFAULT 0)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS statuses
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      username TEXT,
-                      text TEXT,
-                      bg_color TEXT,
-                      created_at REAL)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS status_views
-                     (status_id INTEGER, viewer TEXT, viewed_at REAL,
-                      UNIQUE(status_id, viewer))''')
-
-
-init_db()
-
-
-def err(message):
-    return jsonify({'status': 'error', 'message': message})
-
-
-def check_pw(stored, given):
-    """يرجع (هل صحيحة، هل تحتاج ترقية للتشفير). يدعم الحسابات القديمة بكلمات مرور نصية."""
-    stored = stored or ''
-    if stored.startswith(('pbkdf2:', 'scrypt:')):
-        return check_password_hash(stored, given), False
-    return stored == given, True
-
-
-# ───────────────────────── الصفحة الرئيسية ─────────────────────────
-
-def find_index():
-    """يبحث عن index.html بجانب السيرفر، وإلا في مجلد التشغيل، وإلا أي ملف index*.html."""
-    folders = [BASE_DIR]
-    if os.getcwd() != BASE_DIR:
-        folders.append(os.getcwd())
-    for d in folders:
-        p = os.path.join(d, 'index.html')
-        if os.path.isfile(p):
-            return p
-    for d in folders:
-        found = sorted(glob.glob(os.path.join(d, 'index*.html')))
-        if found:
-            return found[0]
-    return None
-
-
-@app.route('/')
-@app.route('/index.html')
-def index():
-    path = find_index()
-    if not path:
-        files = ' ، '.join(sorted(os.listdir(BASE_DIR)))
-        page = (
-            '<html dir="rtl" lang="ar"><meta charset="utf-8">'
-            '<body style="font-family:sans-serif;background:#0f172a;color:#f0f9ff;padding:24px">'
-            '<h2>السيرفر شغّال، لكن ما لقيت ملف index.html</h2>'
-            f'<p>مجلد السيرفر: <code dir="ltr">{html.escape(BASE_DIR)}</code></p>'
-            f'<p>الملفات الموجودة فيه: <code dir="ltr">{html.escape(files)}</code></p>'
-            '<p>ضع index.html في نفس هذا المجلد ثم حدّث الصفحة.</p></body></html>'
-        )
-        return Response(page, status=404, mimetype='text/html')
-    with open(path, 'rb') as f:
-        data = f.read()
-    resp = Response(data, mimetype='text/html')
-    resp.headers['Cache-Control'] = 'no-store'
-    return resp
-
-
-@app.route('/favicon.ico')
-def favicon():
-    return '', 204
-
-
-@app.route('/ping')
-def ping():
-    return jsonify({'status': 'ok'})
-
-
-# ───────────────────────── الحسابات ─────────────────────────
-
-@app.route('/auth', methods=['POST'])
-def auth():
-    data = request.get_json(silent=True) or {}
-    username = (data.get('username') or '').strip()
-    password = (data.get('password') or '').strip()
-
-    if not username or not password:
-        return err('يرجى إدخال اسم المستخدم وكلمة المرور')
-    if len(username) > 30:
-        return err('اسم المستخدم طويل جداً (الحد الأقصى 30 حرفاً)')
-
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT password, avatar FROM users WHERE username=?", (username,))
-        user = c.fetchone()
-
-        if user:
-            ok, upgrade = check_pw(user[0], password)
-            if not ok:
-                return err('كلمة المرور غير صحيحة!')
-            if upgrade:
-                c.execute("UPDATE users SET password=? WHERE username=?",
-                          (generate_password_hash(password), username))
-            return jsonify({'status': 'success', 'username': username, 'avatar': user[1] or ''})
-
-        c.execute("INSERT INTO users (username, password, avatar) VALUES (?, ?, '')",
-                  (username, generate_password_hash(password)))
-    return jsonify({'status': 'success', 'username': username, 'avatar': ''})
-
-
-@app.route('/update_profile', methods=['POST'])
-def update_profile():
-    data = request.get_json(silent=True) or {}
-    old_u = (data.get('old_username') or '').strip()
-    new_u = (data.get('new_username') or '').strip()
-    avatar = data.get('avatar')
-
-    if not new_u:
-        return err('اسم المستخدم لا يمكن أن يكون فارغاً')
-    if len(new_u) > 30:
-        return err('اسم المستخدم طويل جداً (الحد الأقصى 30 حرفاً)')
-    if avatar is not None:
-        if not isinstance(avatar, str) or len(avatar) > 600_000 or \
-                (avatar and not avatar.startswith('data:image/')):
-            return err('صورة غير صالحة')
-
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM users WHERE username=?", (old_u,))
-        if not c.fetchone():
-            return err('الحساب غير موجود')
-
-        if new_u != old_u:
-            c.execute("SELECT 1 FROM users WHERE username=?", (new_u,))
-            if c.fetchone():
-                return err('اسم المستخدم مستخدم بالفعل!')
-            c.execute("UPDATE users SET username=? WHERE username=?", (new_u, old_u))
-            c.execute("UPDATE friends SET user1=? WHERE user1=?", (new_u, old_u))
-            c.execute("UPDATE friends SET user2=? WHERE user2=?", (new_u, old_u))
-            c.execute("UPDATE messages SET sender=? WHERE sender=?", (new_u, old_u))
-            c.execute("UPDATE messages SET receiver=? WHERE receiver=?", (new_u, old_u))
-            c.execute("UPDATE statuses SET username=? WHERE username=?", (new_u, old_u))
-            c.execute("UPDATE status_views SET viewer=? WHERE viewer=?", (new_u, old_u))
-            c.execute("UPDATE blocks SET blocker=? WHERE blocker=?", (new_u, old_u))
-            c.execute("UPDATE blocks SET blocked=? WHERE blocked=?", (new_u, old_u))
-
-        if avatar is not None:
-            c.execute("UPDATE users SET avatar=? WHERE username=?", (avatar, new_u))
-
-        c.execute("SELECT avatar FROM users WHERE username=?", (new_u,))
-        updated_avatar = c.fetchone()[0] or ''
-    return jsonify({'status': 'success', 'username': new_u, 'avatar': updated_avatar})
-
-
-# ───────────────────────── الأصدقاء ─────────────────────────
-
-@app.route('/search', methods=['GET'])
-def search():
-    query = request.args.get('q', '').strip()
-    current_user = request.args.get('user', '')
-    with closing(db()) as conn:
-        c = conn.cursor()
-        c.execute("SELECT username, avatar FROM users WHERE username LIKE ? AND username != ? LIMIT 30",
-                  (f'%{query}%', current_user))
-        results = [{'username': row[0], 'avatar': row[1] or ''} for row in c.fetchall()]
-    return jsonify({'users': results})
-
-
-@app.route('/add_friend', methods=['POST'])
-def add_friend():
-    data = request.get_json(silent=True) or {}
-    user1 = data.get('user')
-    user2 = data.get('friend')
-    if not user1 or not user2 or user1 == user2:
-        return err('طلب غير صالح')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM users WHERE username IN (?, ?)", (user1, user2))
-        if c.fetchone()[0] != 2:
-            return err('المستخدم غير موجود')
-        c.execute("INSERT OR IGNORE INTO friends (user1, user2) VALUES (?, ?)", (user1, user2))
-        c.execute("INSERT OR IGNORE INTO friends (user1, user2) VALUES (?, ?)", (user2, user1))
-    return jsonify({'status': 'success'})
-
-
-@app.route('/friends', methods=['GET'])
-def get_friends():
-    user = request.args.get('user')
-    with closing(db()) as conn:
-        c = conn.cursor()
-        c.execute('''SELECT u.username, u.avatar FROM friends f
-                     JOIN users u ON f.user2 = u.username
-                     WHERE f.user1=?''', (user,))
-        friends = [{'username': row[0], 'avatar': row[1] or ''} for row in c.fetchall()]
-    return jsonify({'friends': friends})
-
-
-# ───────────────────────── الرسائل ─────────────────────────
-
-@app.route('/messages', methods=['GET'])
-def get_messages():
-    u1 = request.args.get('u1')
-    u2 = request.args.get('u2')
-    with closing(db()) as conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE blocker=? AND blocked=?", (u1, u2))
-        blocked_by_me = bool(c.fetchone())
-        c.execute("SELECT 1 FROM blocks WHERE blocker=? AND blocked=?", (u2, u1))
-        blocked_me = bool(c.fetchone())
-
-        c.execute('''SELECT id, sender, receiver, text, is_read, edited, deleted_for_all,
-                            deleted_by_sender, deleted_by_receiver
-                     FROM messages
-                     WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
-                     ORDER BY id ASC''', (u1, u2, u2, u1))
-        msgs = []
-        for row in c.fetchall():
-            if row[1] == u1 and row[7] == 1:
-                continue
-            if row[2] == u1 and row[8] == 1:
-                continue
-            msgs.append({
-                'id': row[0], 'sender': row[1], 'receiver': row[2],
-                'text': '' if row[6] else row[3],
-                'is_read': row[4], 'edited': row[5], 'deleted_for_all': row[6],
-            })
-    return jsonify({'messages': msgs, 'blocked_by_me': blocked_by_me, 'blocked_me': blocked_me})
-
-
-@app.route('/clear_chat', methods=['POST'])
-def clear_chat():
-    data = request.get_json(silent=True) or {}
-    u, f = data.get('user'), data.get('friend')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("UPDATE messages SET deleted_by_sender=1 WHERE sender=? AND receiver=?", (u, f))
-        c.execute("UPDATE messages SET deleted_by_receiver=1 WHERE receiver=? AND sender=?", (u, f))
-    return jsonify({'status': 'success'})
-
-
-@app.route('/toggle_block', methods=['POST'])
-def toggle_block():
-    data = request.get_json(silent=True) or {}
-    u, f = data.get('user'), data.get('friend')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE blocker=? AND blocked=?", (u, f))
-        if c.fetchone():
-            c.execute("DELETE FROM blocks WHERE blocker=? AND blocked=?", (u, f))
-            blocked = False
-        else:
-            c.execute("INSERT OR IGNORE INTO blocks (blocker, blocked) VALUES (?, ?)", (u, f))
-            blocked = True
-    return jsonify({'status': 'success', 'blocked': blocked})
-
-
-# ───────────────────────── الحالات (24 ساعة) ─────────────────────────
-
-@app.route('/statuses', methods=['GET', 'POST'])
-def statuses():
-    now = time.time()
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM statuses WHERE created_at < ?", (now - 86400,))
-        c.execute("DELETE FROM status_views WHERE status_id NOT IN (SELECT id FROM statuses)")
-
-        if request.method == 'POST':
-            data = request.get_json(silent=True) or {}
-            user = data.get('user')
-            text = (data.get('text') or '').strip()
-            bg = data.get('bg_color') or ''
-            if not user or not text:
-                return err('اكتب نص الحالة أولاً')
-            if len(text) > 500:
-                return err('الحالة طويلة جداً')
-            if not bg.startswith('linear-gradient(') or 'url' in bg.lower() or len(bg) > 200:
-                bg = 'linear-gradient(135deg, #0284c7, #1e3a8a)'
-            c.execute("INSERT INTO statuses (username, text, bg_color, created_at) VALUES (?, ?, ?, ?)",
-                      (user, text, bg, now))
-            return jsonify({'status': 'success'})
-
-        # الحالات تظهر للجميع (وليس للأصدقاء فقط)
-        user = request.args.get('user') or ''
-        c.execute('''SELECT s.id, s.username, s.text, s.bg_color, s.created_at, u.avatar
-                     FROM statuses s
-                     JOIN users u ON s.username = u.username
-                     ORDER BY s.created_at DESC
-                     LIMIT 200''')
-        rows = c.fetchall()
-        items = []
-        for row in rows:
-            hours_left = max(1, int((row[4] + 86400 - now) // 3600))
-            item = {'id': row[0], 'username': row[1], 'text': row[2], 'bg_color': row[3],
-                    'hours_left': hours_left, 'avatar': row[5] or ''}
-            if row[1] == user:
-                # صاحب الحالة فقط يرى من شاهدها
-                c.execute('''SELECT v.viewer, u.avatar FROM status_views v
-                             LEFT JOIN users u ON u.username = v.viewer
-                             WHERE v.status_id = ?
-                             ORDER BY v.viewed_at DESC''', (row[0],))
-                item['viewers'] = [{'username': v[0], 'avatar': v[1] or ''} for v in c.fetchall()]
-            items.append(item)
-    return jsonify({'statuses': items})
-
-
-@app.route('/status_view', methods=['POST'])
-def status_view():
-    """تسجيل أن مستخدماً شاهد حالة."""
-    data = request.get_json(silent=True) or {}
-    sid = data.get('id')
-    viewer = (data.get('viewer') or '').strip()
-    if not isinstance(sid, int) or not viewer:
-        return err('طلب غير صالح')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT username FROM statuses WHERE id=?", (sid,))
-        row = c.fetchone()
-        if not row or row[0] == viewer:
-            return jsonify({'status': 'success'})
-        c.execute("SELECT 1 FROM users WHERE username=?", (viewer,))
-        if not c.fetchone():
-            return err('المستخدم غير موجود')
-        c.execute("INSERT OR IGNORE INTO status_views (status_id, viewer, viewed_at) VALUES (?, ?, ?)",
-                  (sid, viewer, time.time()))
-    return jsonify({'status': 'success'})
-
-
-# ───────────────────────── Socket.IO ─────────────────────────
-
-@socketio.on('join')
-def on_join(data):
-    username = (data or {}).get('username')
-    if username:
-        join_room(username)
-
-
-@socketio.on('send_message')
-def handle_message(data):
-    data = data or {}
-    sender, receiver = data.get('sender'), data.get('receiver')
-    text = (data.get('text') or '').strip()
-    if not sender or not receiver or not text or len(text) > 4000:
-        return
-
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT 1 FROM blocks WHERE (blocker=? AND blocked=?) OR (blocker=? AND blocked=?)",
-                  (sender, receiver, receiver, sender))
-        if c.fetchone():
-            return
-        c.execute("INSERT INTO messages (sender, receiver, text) VALUES (?, ?, ?)",
-                  (sender, receiver, text))
-        msg_id = c.lastrowid
-
-    payload = {'id': msg_id, 'sender': sender, 'receiver': receiver, 'text': text,
-               'is_read': 0, 'edited': 0, 'deleted_for_all': 0}
-    emit('receive_message', payload, room=receiver)
-    emit('receive_message', payload, room=sender)
-
-
-@socketio.on('mark_read')
-def mark_read(data):
-    data = data or {}
-    sender, receiver = data.get('sender'), data.get('receiver')
-    if not sender or not receiver:
-        return
-    with closing(db()) as conn, conn:
-        conn.execute("UPDATE messages SET is_read=1 WHERE sender=? AND receiver=? AND is_read=0",
-                     (sender, receiver))
-    emit('messages_read', {'by': receiver}, room=sender)
-
-
-@socketio.on('edit_message')
-def edit_message(data):
-    data = data or {}
-    msg_id, sender, receiver = data.get('id'), data.get('sender'), data.get('receiver')
-    new_text = (data.get('text') or '').strip()
-    if not msg_id or not sender or not new_text or len(new_text) > 4000:
-        return
-    with closing(db()) as conn, conn:
-        cur = conn.execute(
-            "UPDATE messages SET text=?, edited=1 WHERE id=? AND sender=? AND deleted_for_all=0",
-            (new_text, msg_id, sender))
-        if cur.rowcount == 0:
-            return
-    payload = {'id': msg_id, 'text': new_text, 'edited': 1}
-    emit('message_updated', payload, room=sender)
-    emit('message_updated', payload, room=receiver)
-
-
-@socketio.on('delete_message')
-def delete_message(data):
-    data = data or {}
-    msg_id, mode, user, friend = data.get('id'), data.get('mode'), data.get('user'), data.get('friend')
-    if not msg_id or not user:
-        return
-    with closing(db()) as conn, conn:
-        if mode == 'everyone':
-            cur = conn.execute("UPDATE messages SET deleted_for_all=1 WHERE id=? AND sender=?",
-                               (msg_id, user))
-            if cur.rowcount == 0:
-                return
-        else:
-            cur = conn.execute("UPDATE messages SET deleted_by_sender=1 WHERE id=? AND sender=?",
-                               (msg_id, user))
-            if cur.rowcount == 0:
-                return
-
-    if mode == 'everyone':
-        payload = {'id': msg_id, 'deleted_for_all': 1, 'text': ''}
-        emit('message_updated', payload, room=user)
-        if friend:
-            emit('message_updated', payload, room=friend)
-    else:
-        emit('message_removed', {'id': msg_id}, room=user)
-
-
-if __name__ == '__main__':
-    index_path = find_index()
-    print('=' * 50)
-    print('❄️  سيرفر قلب جليدي')
-    print('مجلد السيرفر :', BASE_DIR)
-    print('ملف الصفحة   :', index_path or '⚠️ غير موجود! ضع index.html بجانب server.py')
-    print(f'افتح الرابط   : http://127.0.0.1:{PORT}')
-    print('=' * 50)
-    socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)
-                
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قلب جليدي 💙❄️</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: radial-gradient(circle at top right, #1e3a8a, #0f172a 45%, #020617 100%);
+            --ice-glass: rgba(224, 242, 254, 0.08);
+            --ice-glass-heavy: rgba(15, 23, 42, 0.72);
+            --ice-border: rgba(186, 230, 253, 0.35);
+            --ice-highlight: rgba(255, 255, 255, 0.18);
+            --ice-accent: #38bdf8;
+            --ice-cyan: #7dd3fc;
+            --ice-glow: 0 0 20px rgba(56, 189, 248, 0.45), inset 0 0 12px rgba(255, 255, 255, 0.12);
+            --text-main: #f0f9ff;
+            --text-muted: #bae6fd;
+            --danger: #f87171;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Cairo', sans-serif;
+        }
+
+        body {
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* تأثير الثلج المتساقط في الخلفية */
+        .snowflakes {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .snowflake {
+            position: absolute;
+            top: -10px;
+            color: rgba(224, 242, 254, 0.45);
+            font-size: 1rem;
+            animation: fall linear infinite;
+        }
+        @keyframes fall {
+            to { transform: translateY(105vh) rotate(360deg); }
+        }
+
+        /* شاشة تسجيل الدخول */
+        #auth-screen {
+            position: relative;
+            z-index: 1;
+            background: var(--ice-glass);
+            backdrop-filter: blur(22px) saturate(160%);
+            border: 1px solid var(--ice-border);
+            border-top: 1px solid rgba(255, 255, 255, 0.45);
+            padding: 40px;
+            border-radius: 28px;
+            width: 90%;
+            max-width: 410px;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6), var(--ice-glow);
+        }
+
+        .logo {
+            font-size: 2.1rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            background: linear-gradient(to bottom, #ffffff, #7dd3fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.5));
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px 16px;
+            margin-bottom: 14px;
+            border-radius: 14px;
+            border: 1px solid var(--ice-border);
+            background: rgba(15, 23, 42, 0.55);
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            border-color: var(--ice-accent);
+            box-shadow: var(--ice-glow);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: linear-gradient(135deg, #0284c7, #38bdf8);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.25s;
+            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--ice-glow);
+        }
+
+        /* واجهة التطبيق الرئيسية — شاشة كاملة */
+        #app-screen {
+            position: relative;
+            z-index: 1;
+            display: none;
+            width: 100%;
+            height: 100dvh;
+            background: var(--ice-glass);
+            backdrop-filter: blur(24px) saturate(150%);
+            overflow: hidden;
+        }
+
+        /* القائمة الجانبية */
+        .sidebar {
+            width: 360px;
+            flex-shrink: 0;
+            border-left: 1px solid var(--ice-border);
+            display: flex;
+            flex-direction: column;
+            background: rgba(9, 21, 38, 0.55);
+        }
+
+        .sidebar-header {
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--ice-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .user-profile-mini {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--ice-accent);
+            background: linear-gradient(135deg, #0ea5e9, #1e3a8a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #fff;
+            flex-shrink: 0;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+        }
+
+        .tab-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .search-box {
+            padding: 14px;
+            border-bottom: 1px solid var(--ice-border);
+            display: flex;
+            gap: 8px;
+        }
+
+        .search-box input { margin-bottom: 0; padding: 8px 12px; }
+        .search-box button { width: auto; padding: 8px 16px; }
+
+        .list-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .user-item {
+            padding: 11px 14px;
+            border-radius: 16px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid transparent;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .user-item:hover, .user-item.active {
+            background: rgba(56, 189, 248, 0.22);
+            border-color: var(--ice-border);
+            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.15);
+        }
+
+        .add-btn {
+            width: auto;
+            padding: 5px 12px;
+            font-size: 0.8rem;
+            border-radius: 10px;
+        }
+
+        /* شريط التنقل السفلي */
+        .bottom-nav {
+            display: flex;
+            border-top: 1px solid var(--ice-border);
+            background: rgba(6, 16, 30, 0.85);
+            padding: 6px;
+            gap: 6px;
+        }
+
+        .nav-btn {
+            flex: 1;
+            background: transparent;
+            border: 1px solid transparent;
+            box-shadow: none;
+            padding: 8px 4px;
+            border-radius: 14px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .nav-btn:hover { transform: none; background: rgba(255, 255, 255, 0.06); }
+        .nav-btn.active {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.45), rgba(56, 189, 248, 0.25));
+            border-color: var(--ice-border);
+            color: #fff;
+            box-shadow: var(--ice-glow);
+        }
+
+        /* قسم الحالات */
+        .status-card {
+            padding: 16px;
+            border-radius: 18px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+        .status-text {
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+        .color-picker-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .color-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .color-dot.selected { border-color: #fff; transform: scale(1.15); }
+
+        /* منطقة المحادثة */
+        .chat-area {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            background: rgba(15, 23, 42, 0.25);
+        }
+
+        .chat-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--ice-border);
+            background: rgba(9, 21, 38, 0.45);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        .chat-who { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+        .chat-who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* زر الرجوع (يظهر على الجوال فقط) */
+        .back-btn {
+            display: none;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            border-radius: 50%;
+            font-size: 1.3rem;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--ice-border);
+            box-shadow: none;
+        }
+        .back-btn:hover { transform: none; }
+
+        /* من شاهد الحالة */
+        .viewers-btn {
+            width: auto;
+            margin-top: 10px;
+            padding: 5px 12px;
+            font-size: 0.8rem;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: none;
+        }
+        .viewers-list {
+            margin-top: 8px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 12px;
+            padding: 4px 12px;
+        }
+        .viewer-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.85rem; }
+
+        /* عرض الصورة الشخصية بحجم كبير */
+        #avatar-viewer {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(2, 6, 23, 0.92);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        #avatar-viewer-img { border-width: 3px; }
+
+        .chat-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-pill {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--ice-border);
+            box-shadow: none;
+        }
+        .action-pill.danger { color: #fca5a5; border-color: rgba(248, 113, 113, 0.4); }
+        .action-pill.danger:hover { background: rgba(239, 68, 68, 0.25); }
+
+        .messages-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .msg {
+            max-width: 72%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.45;
+            position: relative;
+            backdrop-filter: blur(8px);
+        }
+
+        .msg.sent {
+            align-self: flex-start;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.85), rgba(56, 189, 248, 0.75));
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.25);
+        }
+
+        .msg.received {
+            align-self: flex-end;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid var(--ice-border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg.deleted {
+            font-style: italic;
+            opacity: 0.65;
+            background: rgba(15, 23, 42, 0.5);
+        }
+
+        .msg-meta {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            margin-top: 4px;
+            color: rgba(240, 249, 255, 0.85);
+        }
+
+        .read-badge { color: #e0f2fe; font-weight: 700; text-shadow: 0 0 6px #fff; }
+
+        .msg-menu-btn {
+            position: absolute;
+            top: 6px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.25);
+            border: none;
+            color: #fff;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            font-size: 0.75rem;
+            padding: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none;
+        }
+
+        .msg.sent:not(.deleted):hover .msg-menu-btn { display: flex; }
+
+        .msg-dropdown {
+            position: absolute;
+            top: 30px;
+            left: 8px;
+            background: rgba(9, 21, 38, 0.95);
+            border: 1px solid var(--ice-border);
+            border-radius: 12px;
+            padding: 4px;
+            z-index: 20;
+            min-width: 135px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+        }
+
+        .msg-dropdown div {
+            padding: 7px 10px;
+            font-size: 0.82rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .msg-dropdown div:hover { background: rgba(56, 189, 248, 0.25); }
+
+        .chat-input-area {
+            padding: 14px 20px;
+            border-top: 1px solid var(--ice-border);
+            display: flex;
+            gap: 10px;
+            background: rgba(9, 21, 38, 0.5);
+        }
+        .chat-input-area input { margin-bottom: 0; }
+        .chat-input-area button { width: 110px; }
+
+        .section-title {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 8px 4px;
+            font-weight: 700;
+        }
+
+        @media (hover: none) {
+            .msg.sent:not(.deleted) .msg-menu-btn { display: flex; }
+        }
+        body { height: 100dvh; }
+
+        /* الجوال: قائمة الدردشات بشاشة كاملة، وعند الضغط على دردشة تُفتح بشاشة كاملة */
+        @media (max-width: 900px) {
+            .sidebar { width: 100%; border-left: none; }
+            .chat-area { display: none; width: 100%; }
+            #app-screen.in-chat .sidebar { display: none; }
+            #app-screen.in-chat .chat-area { display: flex; }
+            .back-btn { display: flex; }
+            .msg { max-width: 82%; }
+            .chat-input-area { padding: 10px 12px; }
+            .chat-input-area button { width: 96px; }
+            .messages-box { padding: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="snowflakes" id="snow-container"></div>
+
+    <!-- شاشة تسجيل الدخول -->
+    <div id="auth-screen">
+        <div class="logo">قلب جليدي 💙❄️</div>
+        <p class="subtitle">أدخل اسم المستخدم وكلمة المرور للدخول إلى عالم الجليد</p>
+        <input type="text" id="username-input" placeholder="اسم المستخدم...">
+        <input type="password" id="password-input" placeholder="كلمة المرور...">
+        <button onclick="login()">دخول ❄️</button>
+        <p id="auth-error" style="color: #fca5a5; margin-top: 12px; font-size: 0.9rem;"></p>
+    </div>
+
+    <!-- واجهة التطبيق -->
+    <div id="app-screen">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span style="font-weight: 800; font-size: 1.1rem;">قلب جليدي 💙</span>
+                <div class="user-profile-mini">
+                    <span id="current-user-badge" style="color: var(--ice-cyan); font-size: 0.9rem; font-weight: 600;"></span>
+                    <div id="my-header-avatar" class="avatar" style="width: 34px; height: 34px; font-size: 0.85rem; cursor: pointer;" onclick="showAvatarBig(currentUser, currentAvatar)"></div>
+                </div>
+            </div>
+
+            <!-- 1. تبويب الأصدقاء -->
+            <div id="tab-friends" class="tab-content">
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="ابحث عن صديق بالاسم...">
+                    <button onclick="searchUsers()">بحث</button>
+                </div>
+                <div class="list-container">
+                    <div id="search-results-section" style="display: none;">
+                        <div class="section-title">نتائج البحث:</div>
+                        <div id="search-results"></div>
+                    </div>
+                    <div class="section-title">الأصدقاء:</div>
+                    <div id="friends-list"></div>
+                </div>
+            </div>
+
+            <!-- 2. تبويب الحالات (24 ساعة) -->
+            <div id="tab-statuses" class="tab-content" style="display: none;">
+                <div class="list-container">
+                    <div class="section-title">أضف حالة نصية (تختفي بعد 24 ساعة) ❄️</div>
+                    <textarea id="status-input" rows="2" placeholder="اكتب حالتك الجليدية هنا..."></textarea>
+                    <div class="color-picker-row">
+                        <div class="color-dot selected" style="background: linear-gradient(135deg, #0284c7, #1e3a8a);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #0284c7, #1e3a8a)')"></div>
+                        <div class="color-dot" style="background: linear-gradient(135deg, #0f766e, #0e7490);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #0f766e, #0e7490)')"></div>
+                        <div class="color-dot" style="background: linear-gradient(135deg, #4338ca, #312e81);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #4338ca, #312e81)')"></div>
+                        <div class="color-dot" style="background: linear-gradient(135deg, #1e293b, #334155);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #1e293b, #334155)')"></div>
+                    </div>
+                    <button onclick="postStatus()" style="margin-bottom: 16px;">نشر الحالة ✨</button>
+                    <div class="section-title">حالات الجميع:</div>
+                    <div id="statuses-list"></div>
+                </div>
+            </div>
+
+            <!-- 3. تبويب الإعدادات -->
+            <div id="tab-settings" class="tab-content" style="display: none;">
+                <div class="list-container">
+                    <div class="section-title">إعدادات الحساب الجليدي ⚙️</div>
+                    <div style="text-align: center; margin: 15px 0;">
+                        <div id="settings-avatar-preview" class="avatar" style="width: 80px; height: 80px; font-size: 1.8rem; margin: 0 auto 10px;"></div>
+                        <label style="display: inline-block; padding: 6px 14px; background: rgba(56, 189, 248, 0.2); border: 1px solid var(--ice-border); border-radius: 10px; cursor: pointer; font-size: 0.85rem;">
+                            تغيير صورة الحساب 📷
+                            <input type="file" id="avatar-file-input" accept="image/*" style="display: none;" onchange="previewAvatar(event)">
+                        </l
