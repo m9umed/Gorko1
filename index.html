@@ -102,6 +102,7 @@ textarea{min-height:120px;resize:vertical;margin:10px 0}
   <button data-t="home" onclick="go('home')">🏠<span>الرئيسية</span></button>
   <button data-t="add" onclick="go('add')"><b>＋</b></button>
   <button data-t="videos" onclick="go('videos')">🎬<span>فيديوهات</span></button>
+  <button data-t="search" onclick="go('search')">🔍<span>بحث</span></button>
   <button data-t="me" onclick="go('profile',ME.username)">👤<span>حسابي</span></button>
  </nav>
 </div>
@@ -141,6 +142,7 @@ ${p.text?`<p class="tx">${esc(p.text)}</p>`:''}${media(p.media,p.mtype)}
 const R={
  async home(){const l=await api('/feed');$('#v').innerHTML=`<section class="card ct"><b>تواصل مع مطوّري التطبيق RAMALES</b><div><a class="wa" href="https://wa.me/972567101138" target="_blank">واتساب</a><a class="ig" href="https://instagram.com/m_2007d_d" target="_blank">انستجرام</a></div></section>`+(l.map(post).join('')||'<p class="mu">لا يوجد منشورات بعد. كن أول من ينشر!</p>')},
  add(){$('#v').innerHTML=`<div class="card"><b>منشور جديد</b><textarea id="pt" placeholder="شو في بالك؟"></textarea><label class="fl">📷 إضافة صورة أو فيديو<input type="file" id="pf" accept="image/*,video/*" hidden onchange="this.parentNode.dataset.n=this.files[0]?this.files[0].name:''"></label><button class="btn" onclick="pub(this)">نشر</button></div>`},
+ search(){$('#v').innerHTML=`<input id="sq" placeholder="ابحث عن شخص باسم المستخدم..." oninput="dq()" autofocus><div id="sr" style="margin-top:12px"></div>`;$('#sq').focus()},
  async videos(){const l=await api('/feed?type=video');$('#v').innerHTML=l.map(post).join('')||'<p class="mu">لا يوجد فيديوهات بعد</p>'},
  async profile(n){const u=await api('/user/'+encodeURIComponent(n)),l=await api('/feed?user='+u.id),m=u.id==ME.id;
   $('#v').innerHTML=`<div class="card pf">${av(u,'big')}<h2>${esc(u.username)}</h2><div class="st"><span><b>${u.posts}</b>منشور</span><span><b>${u.followers}</b>متابع</span><span><b>${u.following}</b>يتابع</span></div>
@@ -162,6 +164,10 @@ async function like(id,b){const d=await api('/like/'+id,{method:'POST'});b.class
 async function cm(id){const c=$('#c'+id);if(c.innerHTML){c.innerHTML='';return}const l=await api('/comments/'+id);
  c.innerHTML=l.map(x=>`<p><b>${esc(x.user.username)}</b> ${esc(x.text)}</p>`).join('')+`<div class="in"><input id="ci${id}" placeholder="اكتب تعليق..."><button onclick="addc(${id})">إرسال</button></div>`}
 async function addc(id){const i=$('#ci'+id);if(!i.value.trim())return;await api('/comments/'+id,{method:'POST',json:{text:i.value}});$('#c'+id).innerHTML='';cm(id)}
+let sqt;function dq(){clearTimeout(sqt);sqt=setTimeout(async()=>{const s=$('#sq');if(!s)return;const v=s.value.trim(),b=$('#sr');
+ if(!v){b.innerHTML='';return}const l=await api('/search?q='+encodeURIComponent(v));
+ b.innerHTML=l.map(u=>`<div class="card row"><div class="row fx" onclick="go('profile','${u.username}')">${av(u)}<b>${esc(u.username)}</b></div><button class="${u.i_follow?'btn2':'btn'}" onclick="sfl(${u.id},this)">${u.i_follow?'إلغاء المتابعة':'متابعة'}</button></div>`).join('')||'<p class="mu">ما لقينا حدا بهذا الاسم</p>'},300)}
+async function sfl(id,b){const d=await api('/follow/'+id,{method:'POST'});b.className=d.on?'btn2':'btn';b.textContent=d.on?'إلغاء المتابعة':'متابعة'}
 async function fl(id,n){await api('/follow/'+id,{method:'POST'});go('profile',n)}
 async function snd(f){try{await api('/msg/'+CH,{method:'POST',body:f});go('chat',CH)}catch(e){alert(e.message)}}
 async function st(){const i=$('#ct');if(!i.value.trim())return;const f=new FormData();f.append('text',i.value);i.value='';snd(f)}
@@ -180,5 +186,5 @@ function opts(){sheet([['👤 الملف الشخصي',()=>go('profile',CU.usern
 boot();
 </script>
 </body>
-    </html>
-    
+                                                            </html>
+ 
