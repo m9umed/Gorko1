@@ -252,8 +252,6 @@ def update_profile():
         c.execute("SELECT avatar FROM users WHERE username=?", (new_u,))
         updated_avatar = c.fetchone()[0] or ''
     return jsonify({'status': 'success', 'username': new_u, 'avatar': updated_avatar})
-
-
 # ───────────────────────── الأصدقاء ─────────────────────────
 
 @app.route('/search', methods=['GET'])
@@ -515,4 +513,13 @@ def delete_message(data):
         emit('message_removed', {'id': msg_id}, room=user)
 
 
-if __name__ == '__m
+if __name__ == '__main__':
+    index_path = find_index()
+    print('=' * 50)
+    print('❄️  سيرفر قلب جليدي')
+    print('مجلد السيرفر :', BASE_DIR)
+    print('ملف الصفحة   :', index_path or '⚠️ غير موجود! ضع index.html بجانب server.py')
+    print(f'افتح الرابط   : http://127.0.0.1:{PORT}')
+    print('=' * 50)
+    socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)
+    
