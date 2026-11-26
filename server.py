@@ -26,21 +26,13 @@ PORT = int(os.environ.get('PORT', 5000))
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'icy_heart_secret_2026')
 CORS(app)
-socketio = SocketIO(
-    app,
-    cors_allowed_origins='*',
-    async_mode='threading',
-    ping_timeout=60,
-    ping_interval=25,
-)
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
 
 
 # ───────────────────────── قاعدة البيانات ─────────────────────────
 
 def db():
-    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
-    conn.execute("PRAGMA busy_timeout = 30000")
-    return conn
+    return sqlite3.connect(DB_PATH, timeout=10)
 
 
 def init_db():
@@ -68,9 +60,6 @@ def init_db():
                       text TEXT,
                       bg_color TEXT,
                       created_at REAL)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS status_views
-                     (status_id INTEGER, viewer TEXT, viewed_at REAL,
-                      UNIQUE(status_id, viewer))''')
 
 
 init_db()
@@ -80,52 +69,12 @@ def err(message):
     return jsonify({'status': 'error', 'message': message})
 
 
-def hash_pw(password):
-    """pbkdf2 أخف وأضمن من scrypt على الاستضافات المجانية (ذاكرة/معالج محدود)."""
-    return generate_password_hash(password, method='pbkdf2:sha256')
-
-
 def check_pw(stored, given):
     """يرجع (هل صحيحة، هل تحتاج ترقية للتشفير). يدعم الحسابات القديمة بكلمات مرور نصية."""
     stored = stored or ''
     if stored.startswith(('pbkdf2:', 'scrypt:')):
         return check_password_hash(stored, given), False
     return stored == given, True
-
-
-@app.errorhandler(Exception)
-def on_error(e):
-    """أي خطأ غير متوقع يرجع كـ JSON ليظهر سببه في الصفحة بدل أن يفشل الدخول بصمت."""
-    from werkzeug.exceptions import HTTPException
-    if isinstance(e, HTTPException):
-        return e
-    app.logger.exception('server error')
-    return jsonify({'status': 'error', 'message': f'خطأ في السيرفر: {type(e).__name__}: {e}'}), 500
-
-
-@app.route('/diag')
-def diag():
-    """افتح /diag في المتصفح لفحص قاعدة البيانات والتشفير."""
-    import sys
-    report = {'python': sys.version.split()[0], 'db_path': DB_PATH, 'index_found': bool(find_index())}
-    try:
-        with closing(db()) as conn, conn:
-            conn.execute("CREATE TABLE IF NOT EXISTS _diag (x INTEGER)")
-            conn.execute("INSERT INTO _diag VALUES (1)")
-            conn.execute("DELETE FROM _diag")
-            report['users'] = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        report['db'] = 'ok'
-    except Exception as e:
-        report['db'] = f'خطأ: {type(e).__name__}: {e}'
-    try:
-        t0 = time.time()
-        h = hash_pw('test')
-        report['hash'] = 'ok'
-        report['hash_seconds'] = round(time.time() - t0, 2)
-        report['check'] = check_password_hash(h, 'test')
-    except Exception as e:
-        report['hash'] = f'خطأ: {type(e).__name__}: {e}'
-    return jsonify(report)
 
 
 # ───────────────────────── الصفحة الرئيسية ─────────────────────────
@@ -202,11 +151,11 @@ def auth():
                 return err('كلمة المرور غير صحيحة!')
             if upgrade:
                 c.execute("UPDATE users SET password=? WHERE username=?",
-                          (hash_pw(password), username))
+                          (generate_password_hash(password), username))
             return jsonify({'status': 'success', 'username': username, 'avatar': user[1] or ''})
 
         c.execute("INSERT INTO users (username, password, avatar) VALUES (?, ?, '')",
-                  (username, hash_pw(password)))
+                  (username, generate_password_hash(password)))
     return jsonify({'status': 'success', 'username': username, 'avatar': ''})
 
 
@@ -242,7 +191,6 @@ def update_profile():
             c.execute("UPDATE messages SET sender=? WHERE sender=?", (new_u, old_u))
             c.execute("UPDATE messages SET receiver=? WHERE receiver=?", (new_u, old_u))
             c.execute("UPDATE statuses SET username=? WHERE username=?", (new_u, old_u))
-            c.execute("UPDATE status_views SET viewer=? WHERE viewer=?", (new_u, old_u))
             c.execute("UPDATE blocks SET blocker=? WHERE blocker=?", (new_u, old_u))
             c.execute("UPDATE blocks SET blocked=? WHERE blocked=?", (new_u, old_u))
 
@@ -252,6 +200,8 @@ def update_profile():
         c.execute("SELECT avatar FROM users WHERE username=?", (new_u,))
         updated_avatar = c.fetchone()[0] or ''
     return jsonify({'status': 'success', 'username': new_u, 'avatar': updated_avatar})
+
+
 # ───────────────────────── الأصدقاء ─────────────────────────
 
 @app.route('/search', methods=['GET'])
@@ -260,9 +210,9 @@ def search():
     current_user = request.args.get('user', '')
     with closing(db()) as conn:
         c = conn.cursor()
-        c.execute("SELECT username, avatar FROM users WHERE username LIKE ? AND username != ? LIMIT 30",
+        c.execute("SELECT username FROM users WHERE username LIKE ? AND username != ? LIMIT 30",
                   (f'%{query}%', current_user))
-        results = [{'username': row[0], 'avatar': row[1] or ''} for row in c.fetchall()]
+        results = [row[0] for row in c.fetchall()]
     return jsonify({'users': results})
 
 
@@ -362,7 +312,6 @@ def statuses():
     with closing(db()) as conn, conn:
         c = conn.cursor()
         c.execute("DELETE FROM statuses WHERE created_at < ?", (now - 86400,))
-        c.execute("DELETE FROM status_views WHERE status_id NOT IN (SELECT id FROM statuses)")
 
         if request.method == 'POST':
             data = request.get_json(silent=True) or {}
@@ -379,48 +328,18 @@ def statuses():
                       (user, text, bg, now))
             return jsonify({'status': 'success'})
 
-        user = request.args.get('user') or ''
-        c.execute('''SELECT s.id, s.username, s.text, s.bg_color, s.created_at, u.avatar
+        user = request.args.get('user')
+        c.execute('''SELECT s.username, s.text, s.bg_color, s.created_at, u.avatar
                      FROM statuses s
                      JOIN users u ON s.username = u.username
-                     ORDER BY s.created_at DESC
-                     LIMIT 200''')
-        rows = c.fetchall()
+                     WHERE s.username = ? OR s.username IN (SELECT user2 FROM friends WHERE user1 = ?)
+                     ORDER BY s.created_at DESC''', (user, user))
         items = []
-        for row in rows:
-            hours_left = max(1, int((row[4] + 86400 - now) // 3600))
-            item = {'id': row[0], 'username': row[1], 'text': row[2], 'bg_color': row[3],
-                    'hours_left': hours_left, 'avatar': row[5] or ''}
-            if row[1] == user:
-                c.execute('''SELECT v.viewer, u.avatar FROM status_views v
-                             LEFT JOIN users u ON u.username = v.viewer
-                             WHERE v.status_id = ?
-                             ORDER BY v.viewed_at DESC''', (row[0],))
-                item['viewers'] = [{'username': v[0], 'avatar': v[1] or ''} for v in c.fetchall()]
-            items.append(item)
+        for row in c.fetchall():
+            hours_left = max(1, int((row[3] + 86400 - now) // 3600))
+            items.append({'username': row[0], 'text': row[1], 'bg_color': row[2],
+                          'hours_left': hours_left, 'avatar': row[4] or ''})
     return jsonify({'statuses': items})
-
-
-@app.route('/status_view', methods=['POST'])
-def status_view():
-    """تسجيل أن مستخدماً شاهد حالة."""
-    data = request.get_json(silent=True) or {}
-    sid = data.get('id')
-    viewer = (data.get('viewer') or '').strip()
-    if not isinstance(sid, int) or not viewer:
-        return err('طلب غير صالح')
-    with closing(db()) as conn, conn:
-        c = conn.cursor()
-        c.execute("SELECT username FROM statuses WHERE id=?", (sid,))
-        row = c.fetchone()
-        if not row or row[0] == viewer:
-            return jsonify({'status': 'success'})
-        c.execute("SELECT 1 FROM users WHERE username=?", (viewer,))
-        if not c.fetchone():
-            return err('المستخدم غير موجود')
-        c.execute("INSERT OR IGNORE INTO status_views (status_id, viewer, viewed_at) VALUES (?, ?, ?)",
-                  (sid, viewer, time.time()))
-    return jsonify({'status': 'success'})
 
 
 # ───────────────────────── Socket.IO ─────────────────────────
@@ -522,4 +441,3 @@ if __name__ == '__main__':
     print(f'افتح الرابط   : http://127.0.0.1:{PORT}')
     print('=' * 50)
     socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)
-    
