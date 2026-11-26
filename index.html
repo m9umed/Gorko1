@@ -1,565 +1,184 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>قلب جليدي 💙❄️</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-gradient: radial-gradient(circle at top right, #1e3a8a, #0f172a 45%, #020617 100%);
-            --ice-glass: rgba(224, 242, 254, 0.08);
-            --ice-glass-heavy: rgba(15, 23, 42, 0.72);
-            --ice-border: rgba(186, 230, 253, 0.35);
-            --ice-highlight: rgba(255, 255, 255, 0.18);
-            --ice-accent: #38bdf8;
-            --ice-cyan: #7dd3fc;
-            --ice-glow: 0 0 20px rgba(56, 189, 248, 0.45), inset 0 0 12px rgba(255, 255, 255, 0.12);
-            --text-main: #f0f9ff;
-            --text-muted: #bae6fd;
-            --danger: #f87171;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Cairo', sans-serif;
-        }
-
-        body {
-            background: var(--bg-gradient);
-            color: var(--text-main);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* تأثير الثلج المتساقط في الخلفية */
-        .snowflakes {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-            z-index: 0;
-            overflow: hidden;
-        }
-        .snowflake {
-            position: absolute;
-            top: -10px;
-            color: rgba(224, 242, 254, 0.45);
-            font-size: 1rem;
-            animation: fall linear infinite;
-        }
-        @keyframes fall {
-            to { transform: translateY(105vh) rotate(360deg); }
-        }
-
-        /* شاشة تسجيل الدخول */
-        #auth-screen {
-            position: relative;
-            z-index: 1;
-            background: var(--ice-glass);
-            backdrop-filter: blur(22px) saturate(160%);
-            border: 1px solid var(--ice-border);
-            border-top: 1px solid rgba(255, 255, 255, 0.45);
-            padding: 40px;
-            border-radius: 28px;
-            width: 90%;
-            max-width: 410px;
-            text-align: center;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6), var(--ice-glow);
-        }
-
-        .logo {
-            font-size: 2.1rem;
-            font-weight: 800;
-            margin-bottom: 8px;
-            background: linear-gradient(to bottom, #ffffff, #7dd3fc);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.5));
-        }
-
-        .subtitle {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            margin-bottom: 25px;
-        }
-
-        input, textarea, select {
-            width: 100%;
-            padding: 12px 16px;
-            margin-bottom: 14px;
-            border-radius: 14px;
-            border: 1px solid var(--ice-border);
-            background: rgba(15, 23, 42, 0.55);
-            color: #fff;
-            font-size: 0.95rem;
-            outline: none;
-            transition: 0.3s;
-        }
-
-        input:focus, textarea:focus {
-            border-color: var(--ice-accent);
-            box-shadow: var(--ice-glow);
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            border-radius: 14px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: linear-gradient(135deg, #0284c7, #38bdf8);
-            color: #fff;
-            font-size: 1rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: 0.25s;
-            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--ice-glow);
-        }
-
-        /* واجهة التطبيق الرئيسية */
-        #app-screen {
-            position: relative;
-            z-index: 1;
-            display: none;
-            width: 96%;
-            max-width: 1150px;
-            height: 92vh;
-            background: var(--ice-glass);
-            backdrop-filter: blur(24px) saturate(150%);
-            border: 1px solid var(--ice-border);
-            border-top: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 28px;
-            overflow: hidden;
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.65), inset 0 0 25px rgba(186, 230, 253, 0.1);
-        }
-
-        /* القائمة الجانبية */
-        .sidebar {
-            width: 360px;
-            border-left: 1px solid var(--ice-border);
-            display: flex;
-            flex-direction: column;
-            background: rgba(9, 21, 38, 0.55);
-        }
-
-        .sidebar-header {
-            padding: 18px 20px;
-            border-bottom: 1px solid var(--ice-border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .user-profile-mini {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid var(--ice-accent);
-            background: linear-gradient(135deg, #0ea5e9, #1e3a8a);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: #fff;
-            flex-shrink: 0;
-            box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
-        }
-
-        .tab-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .search-box {
-            padding: 14px;
-            border-bottom: 1px solid var(--ice-border);
-            display: flex;
-            gap: 8px;
-        }
-
-        .search-box input { margin-bottom: 0; padding: 8px 12px; }
-        .search-box button { width: auto; padding: 8px 16px; }
-
-        .list-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px;
-        }
-
-        .user-item {
-            padding: 11px 14px;
-            border-radius: 16px;
-            margin-bottom: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid transparent;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .user-item:hover, .user-item.active {
-            background: rgba(56, 189, 248, 0.22);
-            border-color: var(--ice-border);
-            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.15);
-        }
-
-        .add-btn {
-            width: auto;
-            padding: 5px 12px;
-            font-size: 0.8rem;
-            border-radius: 10px;
-        }
-
-        /* شريط التنقل السفلي */
-        .bottom-nav {
-            display: flex;
-            border-top: 1px solid var(--ice-border);
-            background: rgba(6, 16, 30, 0.85);
-            padding: 6px;
-            gap: 6px;
-        }
-
-        .nav-btn {
-            flex: 1;
-            background: transparent;
-            border: 1px solid transparent;
-            box-shadow: none;
-            padding: 8px 4px;
-            border-radius: 14px;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 3px;
-        }
-
-        .nav-btn:hover { transform: none; background: rgba(255, 255, 255, 0.06); }
-        .nav-btn.active {
-            background: linear-gradient(135deg, rgba(2, 132, 199, 0.45), rgba(56, 189, 248, 0.25));
-            border-color: var(--ice-border);
-            color: #fff;
-            box-shadow: var(--ice-glow);
-        }
-
-        /* قسم الحالات */
-        .status-card {
-            padding: 16px;
-            border-radius: 18px;
-            margin-bottom: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-            position: relative;
-        }
-        .status-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-            font-size: 0.85rem;
-            opacity: 0.9;
-        }
-        .status-text {
-            font-size: 1.05rem;
-            font-weight: 600;
-            line-height: 1.5;
-            word-break: break-word;
-        }
-        .color-picker-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        .color-dot {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 2px solid transparent;
-        }
-        .color-dot.selected { border-color: #fff; transform: scale(1.15); }
-
-        /* منطقة المحادثة */
-        .chat-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: rgba(15, 23, 42, 0.25);
-        }
-
-        .chat-header {
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--ice-border);
-            background: rgba(9, 21, 38, 0.45);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chat-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .action-pill {
-            width: auto;
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid var(--ice-border);
-            box-shadow: none;
-        }
-        .action-pill.danger { color: #fca5a5; border-color: rgba(248, 113, 113, 0.4); }
-        .action-pill.danger:hover { background: rgba(239, 68, 68, 0.25); }
-
-        .messages-box {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .msg {
-            max-width: 72%;
-            padding: 10px 15px;
-            border-radius: 18px;
-            font-size: 0.95rem;
-            line-height: 1.45;
-            position: relative;
-            backdrop-filter: blur(8px);
-        }
-
-        .msg.sent {
-            align-self: flex-start;
-            background: linear-gradient(135deg, rgba(2, 132, 199, 0.85), rgba(56, 189, 248, 0.75));
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            border-bottom-right-radius: 4px;
-            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.25);
-        }
-
-        .msg.received {
-            align-self: flex-end;
-            background: rgba(255, 255, 255, 0.12);
-            border: 1px solid var(--ice-border);
-            border-bottom-left-radius: 4px;
-        }
-
-        .msg.deleted {
-            font-style: italic;
-            opacity: 0.65;
-            background: rgba(15, 23, 42, 0.5);
-        }
-
-        .msg-meta {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.72rem;
-            margin-top: 4px;
-            color: rgba(240, 249, 255, 0.85);
-        }
-
-        .read-badge { color: #e0f2fe; font-weight: 700; text-shadow: 0 0 6px #fff; }
-
-        .msg-menu-btn {
-            position: absolute;
-            top: 6px;
-            left: 8px;
-            background: rgba(0, 0, 0, 0.25);
-            border: none;
-            color: #fff;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            font-size: 0.75rem;
-            padding: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            box-shadow: none;
-        }
-
-        .msg.sent:not(.deleted):hover .msg-menu-btn { display: flex; }
-
-        .msg-dropdown {
-            position: absolute;
-            top: 30px;
-            left: 8px;
-            background: rgba(9, 21, 38, 0.95);
-            border: 1px solid var(--ice-border);
-            border-radius: 12px;
-            padding: 4px;
-            z-index: 20;
-            min-width: 135px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
-        }
-
-        .msg-dropdown div {
-            padding: 7px 10px;
-            font-size: 0.82rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .msg-dropdown div:hover { background: rgba(56, 189, 248, 0.25); }
-
-        .chat-input-area {
-            padding: 14px 20px;
-            border-top: 1px solid var(--ice-border);
-            display: flex;
-            gap: 10px;
-            background: rgba(9, 21, 38, 0.5);
-        }
-        .chat-input-area input { margin-bottom: 0; }
-        .chat-input-area button { width: 110px; }
-
-        .section-title {
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            margin: 8px 4px;
-            font-weight: 700;
-        }
-
-        @media (max-width: 768px) {
-            #app-screen { flex-direction: column; height: 96vh; }
-            .sidebar { width: 100%; height: 48%; border-left: none; border-bottom: 1px solid var(--ice-border); }
-            .chat-area { height: 52%; }
-        }
-
-        /* إضافات: شاشات اللمس + ارتفاع الشاشة الحقيقي */
-        @media (hover: none) {
-            .msg.sent:not(.deleted) .msg-menu-btn { display: flex; }
-        }
-        body { height: 100dvh; }
-        #app-screen { height: 92dvh; }
-        @media (max-width: 768px) { #app-screen { height: 96dvh; } }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RAMALES</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1321;--c:#162036;--c2:#1f2d4a;--t:#f1f4fb;--m:#8d9bbd;--a:#ffb703;--b:#ff5d73;--g:linear-gradient(135deg,#ffb703,#ff5d73)}
+*{box-sizing:border-box;margin:0;font-family:Cairo,system-ui,Tahoma,sans-serif}
+body{background:var(--bg);color:var(--t);min-height:100vh}
+[hidden]{display:none!important}
+button,input,textarea{font:inherit;color:inherit;border:0;outline:0}
+button{cursor:pointer;background:none}
+input,textarea{background:var(--c2);border-radius:14px;padding:12px 14px;width:100%}
+.mu{color:var(--m)}
+#auth{min-height:100vh;display:grid;place-items:center;padding:20px}
+.box{width:100%;max-width:400px;background:var(--c);border-radius:26px;padding:28px;display:grid;gap:12px;text-align:center}
+.box h1,.logo{font-weight:800;letter-spacing:2px;background:var(--g);-webkit-background-clip:text;background-clip:text;color:transparent}
+.box h1{font-size:38px}
+.tabs{display:flex;background:var(--c2);border-radius:14px;padding:4px}
+.tabs button{flex:1;padding:9px;border-radius:11px;color:var(--m)}
+.tabs .on{background:var(--g);color:#1a1200;font-weight:600}
+.avp{width:92px;height:92px;border-radius:50%;background:var(--c2);margin:auto;display:grid;place-items:center;overflow:hidden;cursor:pointer;font-size:28px;position:relative}
+.avp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.btn{background:var(--g);color:#1a1200;font-weight:800;padding:12px 20px;border-radius:14px}
+.btn2{background:var(--c2);padding:12px 20px;border-radius:14px}
+.er{color:var(--b);min-height:20px;font-size:14px}
+header{position:fixed;top:0;inset-inline:0;height:56px;background:#0d1321ee;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:5;max-width:600px;margin:auto}
+.logo{font-size:24px}
+header div{display:flex;gap:6px}
+header button{font-size:22px;position:relative;padding:6px 8px}
+i.bd,header i{background:var(--b);color:#fff;font-style:normal;font-size:11px;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
+header i{position:absolute;top:0;inset-inline-start:0}
+i:empty{display:none}
+main{max-width:600px;margin:auto;padding:68px 12px 90px}
+nav{position:fixed;bottom:0;inset-inline:0;max-width:600px;margin:auto;background:#162036f2;backdrop-filter:blur(10px);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));border-radius:22px 22px 0 0;z-index:5}
+nav button{flex:1;display:grid;justify-items:center;font-size:21px;color:var(--m);padding:4px}
+nav span{font-size:11px}
+nav .on{color:var(--a)}
+nav button[data-t=add]{font-size:26px;color:#1a1200}
+nav button[data-t=add] b{background:var(--g);width:46px;height:46px;border-radius:16px;display:grid;place-items:center;margin-top:-18px;font-weight:600}
+.card{background:var(--c);border-radius:20px;padding:14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px;cursor:pointer}
+.row small{margin-inline-start:auto}
+.fx{flex:1}
+.av{width:42px;height:42px;border-radius:50%;object-fit:cover;background:var(--g);color:#1a1200;display:grid;place-items:center;font-weight:800;flex:none}
+.av.big{width:96px;height:96px;font-size:36px}
+.tx{margin:10px 0;white-space:pre-wrap;line-height:1.7}
+.md{width:100%;max-height:70vh;border-radius:14px;margin-top:8px;background:#000;object-fit:contain;display:block}
+audio{width:100%;max-width:240px}
+.acts{display:flex;gap:18px;margin-top:10px}
+.acts button{font-size:16px;color:var(--m)}
+.acts .lk{color:var(--b)}
+.cms p{margin-top:8px;font-size:14px}
+.in{display:flex;gap:8px;margin-top:10px}
+.in button{color:var(--a);font-weight:600}
+.ct{text-align:center;display:grid;gap:10px;background:linear-gradient(135deg,#1f2d4a,#162036)}
+.ct div{display:flex;gap:10px}
+.ct a{flex:1;padding:10px;border-radius:14px;color:#fff;text-decoration:none;font-weight:600}
+.wa{background:#1fa855}.ig{background:linear-gradient(45deg,#f9a03f,#e1306c,#833ab4)}
+textarea{min-height:120px;resize:vertical;margin:10px 0}
+.fl{display:block;background:var(--c2);padding:12px;border-radius:14px;margin-bottom:12px;cursor:pointer}
+.fl::after{content:attr(data-n);color:var(--a);margin-inline-start:8px}
+.pf{text-align:center;display:grid;gap:10px;justify-items:center}
+.st{display:flex;gap:22px;color:var(--m)}.st b{color:var(--t);display:block;font-size:18px}
+.row2{display:flex;gap:8px}
+.ttl{margin:6px 4px 12px}
+.ch{display:grid;gap:8px}
+.chh{position:sticky;top:56px;z-index:3}
+#ms{display:grid;gap:8px;padding-bottom:70px}
+.m{max-width:80%;background:var(--c2);padding:9px 12px;border-radius:16px 16px 16px 4px;justify-self:start;display:grid;gap:4px}
+.m.me{background:var(--g);color:#1a1200;justify-self:end;border-radius:16px 16px 4px 16px}
+.m small{font-size:11px;opacity:.7}
+.m u{text-decoration:none;cursor:pointer;float:left}
+.bar{position:fixed;bottom:0;inset-inline:0;max-width:600px;margin:auto;background:var(--c);padding:8px 8px calc(8px + env(safe-area-inset-bottom));display:flex;gap:6px;align-items:center;z-index:6}
+.bar button,.bar label{font-size:22px;padding:4px 6px;cursor:pointer}
+.sh{position:fixed;inset:0;background:#000a;z-index:9;display:flex;align-items:flex-end}
+.sh div{background:var(--c);width:100%;max-width:600px;margin:auto;border-radius:22px 22px 0 0;padding:12px;display:grid;gap:4px}
+.sh button{padding:14px;border-radius:12px;background:var(--c2)}
+</style>
 </head>
 <body>
+<div id="auth" hidden>
+ <div class="box">
+  <h1>RAMALES</h1><p class="mu">شارك لحظاتك مع أصدقائك</p>
+  <div class="tabs"><button id="tl" class="on" onclick="tab(0)">تسجيل الدخول</button><button id="tr" onclick="tab(1)">إنشاء حساب</button></div>
+  <label class="avp" id="avl" hidden>📷<img id="avp" hidden><input type="file" id="aa" accept="image/*" hidden onchange="pv()"></label>
+  <input id="em" type="email" placeholder="الإيميل" hidden>
+  <input id="un" placeholder="اسم المستخدم أو الإيميل">
+  <input id="pw" type="password" placeholder="كلمة المرور">
+  <input id="pw2" type="password" placeholder="تأكيد كلمة المرور" hidden>
+  <button class="btn" onclick="sub()">متابعة</button>
+  <p id="er" class="er"></p>
+ </div>
+</div>
+<div id="app" hidden>
+ <header><b class="logo">RAMALES</b>
+  <div><button onclick="go('notifs')">🔔<i id="bn"></i></button><button onclick="go('chats')">💬<i id="bm"></i></button></div></header>
+ <main id="v"></main>
+ <nav>
+  <button data-t="home" onclick="go('home')">🏠<span>الرئيسية</span></button>
+  <button data-t="add" onclick="go('add')"><b>＋</b></button>
+  <button data-t="videos" onclick="go('videos')">🎬<span>فيديوهات</span></button>
+  <button data-t="me" onclick="go('profile',ME.username)">👤<span>حسابي</span></button>
+ </nav>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+let T=localStorage.t,ME,V='home',CH=0,CU,poll,reg=0,mr;
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=async(p,o={})=>{o.headers={'X-Token':T||''};if(o.json){o.headers['Content-Type']='application/json';o.body=JSON.stringify(o.json)}
+ const r=await fetch('/api'+p,o),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'حدث خطأ');return d};
+const ago=t=>{const s=Date.now()/1000-t;return s<60?'الآن':s<3600?Math.floor(s/60)+' د':s<86400?Math.floor(s/3600)+' س':Math.floor(s/86400)+' يوم'};
+const av=(u,c='')=>u.avatar?`<img class="av ${c}" src="${u.avatar}">`:`<div class="av ${c}">${esc(u.username[0])}</div>`;
+const media=(m,t)=>!m?'':t=='image'?`<img class="md" src="${m}">`:t=='video'?`<video class="md" src="${m}" controls playsinline></video>`:t=='audio'?`<audio src="${m}" controls></audio>`:`<a href="${m}" target="_blank">📎 ملف</a>`;
 
-    <div class="snowflakes" id="snow-container"></div>
+/* ---- auth ---- */
+function tab(r){reg=r;$('#tl').className=r?'':'on';$('#tr').className=r?'on':'';['#avl','#em','#pw2'].forEach(s=>$(s).hidden=!r);$('#un').placeholder=r?'اسم المستخدم':'اسم المستخدم أو الإيميل';$('#er').textContent=''}
+function pv(){const f=$('#aa').files[0];if(f){$('#avp').src=URL.createObjectURL(f);$('#avp').hidden=false}}
+async function sub(){const e=$('#er');e.textContent='';try{let d;
+ if(reg){if($('#pw').value!=$('#pw2').value)return e.textContent='كلمتا المرور غير متطابقتين';
+  const f=new FormData();f.append('email',$('#em').value);f.append('username',$('#un').value);f.append('password',$('#pw').value);if($('#aa').files[0])f.append('avatar',$('#aa').files[0]);
+  d=await api('/register',{method:'POST',body:f})}
+ else d=await api('/login',{method:'POST',json:{user:$('#un').value,password:$('#pw').value}});
+ T=localStorage.t=d.token;boot()}catch(x){e.textContent=x.message}}
+function out(){localStorage.removeItem('t');location.reload()}
+async function boot(){if(!T){$('#auth').hidden=false;return}
+ try{ME=await api('/me')}catch{return out()}
+ $('#auth').hidden=true;$('#app').hidden=false;go('home');badges();setInterval(badges,5000)}
+async function badges(){try{const b=await api('/badges');$('#bn').textContent=b.n||'';$('#bm').textContent=b.m||''}catch{}}
 
-    <!-- شاشة تسجيل الدخول -->
-    <div id="auth-screen">
-        <div class="logo">قلب جليدي 💙❄️</div>
-        <p class="subtitle">أدخل اسم المستخدم وكلمة المرور للدخول إلى عالم الجليد</p>
-        <input type="text" id="username-input" placeholder="اسم المستخدم...">
-        <input type="password" id="password-input" placeholder="كلمة المرور...">
-        <button onclick="login()">دخول ❄️</button>
-        <p id="auth-error" style="color: #fca5a5; margin-top: 12px; font-size: 0.9rem;"></p>
-    </div>
-
-    <!-- واجهة التطبيق -->
-    <div id="app-screen">
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <span style="font-weight: 800; font-size: 1.1rem;">قلب جليدي 💙</span>
-                <div class="user-profile-mini">
-                    <span id="current-user-badge" style="color: var(--ice-cyan); font-size: 0.9rem; font-weight: 600;"></span>
-                    <div id="my-header-avatar" class="avatar" style="width: 34px; height: 34px; font-size: 0.85rem;"></div>
-                </div>
-            </div>
-
-            <!-- 1. تبويب الأصدقاء -->
-            <div id="tab-friends" class="tab-content">
-                <div class="search-box">
-                    <input type="text" id="search-input" placeholder="ابحث عن صديق بالاسم...">
-                    <button onclick="searchUsers()">بحث</button>
-                </div>
-                <div class="list-container">
-                    <div id="search-results-section" style="display: none;">
-                        <div class="section-title">نتائج البحث:</div>
-                        <div id="search-results"></div>
-                    </div>
-                    <div class="section-title">الأصدقاء:</div>
-                    <div id="friends-list"></div>
-                </div>
-            </div>
-
-            <!-- 2. تبويب الحالات (24 ساعة) -->
-            <div id="tab-statuses" class="tab-content" style="display: none;">
-                <div class="list-container">
-                    <div class="section-title">أضف حالة نصية (تختفي بعد 24 ساعة) ❄️</div>
-                    <textarea id="status-input" rows="2" placeholder="اكتب حالتك الجليدية هنا..."></textarea>
-                    <div class="color-picker-row">
-                        <div class="color-dot selected" style="background: linear-gradient(135deg, #0284c7, #1e3a8a);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #0284c7, #1e3a8a)')"></div>
-                        <div class="color-dot" style="background: linear-gradient(135deg, #0f766e, #0e7490);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #0f766e, #0e7490)')"></div>
-                        <div class="color-dot" style="background: linear-gradient(135deg, #4338ca, #312e81);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #4338ca, #312e81)')"></div>
-                        <div class="color-dot" style="background: linear-gradient(135deg, #1e293b, #334155);" onclick="selectStatusBg(this, 'linear-gradient(135deg, #1e293b, #334155)')"></div>
-                    </div>
-                    <button onclick="postStatus()" style="margin-bottom: 16px;">نشر الحالة ✨</button>
-                    <div class="section-title">حالات الأصدقاء وحالاتي:</div>
-                    <div id="statuses-list"></div>
-                </div>
-            </div>
-
-            <!-- 3. تبويب الإعدادات -->
-            <div id="tab-settings" class="tab-content" style="display: none;">
-                <div class="list-container">
-                    <div class="section-title">إعدادات الحساب الجليدي ⚙️</div>
-                    <div style="text-align: center; margin: 15px 0;">
-                        <div id="settings-avatar-preview" class="avatar" style="width: 80px; height: 80px; font-size: 1.8rem; margin: 0 auto 10px;"></div>
-                        <label style="display: inline-block; padding: 6px 14px; background: rgba(56, 189, 248, 0.2); border: 1px solid var(--ice-border); border-radius: 10px; cursor: pointer; font-size: 0.85rem;">
-                            تغيير صورة الحساب 📷
-                            <input type="file" id="avatar-file-input" accept="image/*" style="display: none;" onchange="previewAvatar(event)">
-                        </label>
-                    </div>
-                    <div class="section-title">تغيير اسم المستخدم:</div>
-                    <input type="text" id="new-username-input" placeholder="اسم المستخدم الجديد...">
-                    <button onclick="saveSettings()">حفظ التعديلات 💾</button>
-                    <button onclick="logout()" style="margin-top: 10px; background: rgba(255,255,255,0.08);">تسجيل الخروج 🚪</button>
-                    <p id="settings-msg" style="margin-top: 10px; font-size: 0.85rem; text-align: center;"></p>
-                </div>
-            </div>
-
-            <!-- الخيارات بالأسفل -->
-            <div class="bottom-nav">
-                <button class="nav-btn active" id="nav-friends" onclick="switchTab('friends')">
-                    <span>💬</span><span>الأصدقاء</span>
-                </button>
-                <button class="nav-btn" id="nav-statuses" onclick="switchTab('statuses')">
-                    <span>❄️</span><span>الحالات</span>
-                </button>
-                <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')">
-                    <span>⚙️</span><span>الإعدادات</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- منطقة المحادثة -->
-        <div class="chat-area">
-            <div class="chat-header" id="chat-header">
-                <span>اختر صديقاً لبدء المحادثة ❄️</span>
-            </div>
-            <div class="messages-box" id="messages-box"></div>
-            <div id="blocked-banner" style="display: none; padding: 12px; text-align: center; background: rgba(239, 68, 68, 0.2); color: #fca5a5; font-size: 0.9rem;">
-                تم حظر هذه المحادثة. لا يمكن إرسال رسائل.
-            </div>
-            <div class="chat-input-area" id="input-area" styl
+/* ---- views ---- */
+async function go(v,a){V=v;clearInterval(poll);
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==(v=='profile'&&a==ME.username?'me':v)));
+ $('#v').innerHTML='<p class="mu">جاري التحميل...</p>';
+ try{await R[v](a)}catch(e){$('#v').innerHTML=`<p class="mu">${esc(e.message)}</p>`}scrollTo(0,0)}
+const post=p=>`<article class="card"><div class="row" onclick="go('profile','${p.user.username}')">${av(p.user)}<b>${esc(p.user.username)}</b><small class="mu">${ago(p.ts)}</small></div>
+${p.text?`<p class="tx">${esc(p.text)}</p>`:''}${media(p.media,p.mtype)}
+<div class="acts"><button onclick="like(${p.id},this)" class="${p.liked?'lk':''}">${p.liked?'❤️':'🤍'} <span>${p.likes}</span></button><button onclick="cm(${p.id})">💬 ${p.comments}</button></div><div class="cms" id="c${p.id}"></div></article>`;
+const R={
+ async home(){const l=await api('/feed');$('#v').innerHTML=`<section class="card ct"><b>تواصل مع مطوّري التطبيق RAMALES</b><div><a class="wa" href="https://wa.me/972567101138" target="_blank">واتساب</a><a class="ig" href="https://instagram.com/m_2007d_d" target="_blank">انستجرام</a></div></section>`+(l.map(post).join('')||'<p class="mu">لا يوجد منشورات بعد. كن أول من ينشر!</p>')},
+ add(){$('#v').innerHTML=`<div class="card"><b>منشور جديد</b><textarea id="pt" placeholder="شو في بالك؟"></textarea><label class="fl">📷 إضافة صورة أو فيديو<input type="file" id="pf" accept="image/*,video/*" hidden onchange="this.parentNode.dataset.n=this.files[0]?this.files[0].name:''"></label><button class="btn" onclick="pub(this)">نشر</button></div>`},
+ async videos(){const l=await api('/feed?type=video');$('#v').innerHTML=l.map(post).join('')||'<p class="mu">لا يوجد فيديوهات بعد</p>'},
+ async profile(n){const u=await api('/user/'+encodeURIComponent(n)),l=await api('/feed?user='+u.id),m=u.id==ME.id;
+  $('#v').innerHTML=`<div class="card pf">${av(u,'big')}<h2>${esc(u.username)}</h2><div class="st"><span><b>${u.posts}</b>منشور</span><span><b>${u.followers}</b>متابع</span><span><b>${u.following}</b>يتابع</span></div>
+  ${m?'<button class="btn2" onclick="out()">تسجيل الخروج</button>':`<div class="row2"><button class="btn" onclick="fl(${u.id},'${u.username}')">${u.i_follow?'إلغاء المتابعة':'متابعة'}</button>${u.mutual?`<button class="btn2" onclick="go('chat',${u.id})">مراسلة</button>`:''}</div>`}</div>`+(l.map(post).join('')||'<p class="mu">لا يوجد منشورات</p>')},
+ async notifs(){const l=await api('/notifs');$('#v').innerHTML='<h3 class="ttl">الإشعارات</h3>'+(l.map(n=>`<div class="card row" onclick="go('profile','${n.user.username}')">${av(n.user)}<div><b>${esc(n.user.username)}</b> ${n.kind=='follow'?'بدأ بمتابعتك. تابعه بالمقابل لتبدأوا الدردشة':'تابعك بالمقابل، صار بإمكانكم الدردشة 💬'}<br><small class="mu">${ago(n.ts)}</small></div></div>`).join('')||'<p class="mu">لا توجد إشعارات</p>');badges()},
+ async chats(){const l=await api('/chats');$('#v').innerHTML='<h3 class="ttl">الدردشات</h3>'+(l.map(c=>`<div class="card row" onclick="go('chat',${c.user.id})">${av(c.user)}<div class="fx"><b>${esc(c.user.username)}</b><br><small class="mu">${esc(c.last||'ابدأ المحادثة')}</small></div><i class="bd">${c.unread||''}</i></div>`).join('')||'<p class="mu">تابع شخصاً ويتابعك بالمقابل لتظهر الدردشة هنا</p>')},
+ async chat(id){CH=id;CU=await api('/uid/'+id);
+  $('#v').innerHTML=`<div class="ch"><div class="card row chh" onclick="opts()">${av(CU)}<b class="fx">${esc(CU.username)}</b><span class="mu">⋮</span></div><div id="ms"></div></div>
+  <div class="bar"><label>📎<input type="file" id="cf" hidden onchange="sf()"></label><input id="ct" placeholder="اكتب رسالة..." onkeydown="if(event.key=='Enter')st()"><button id="mic" onclick="rec()">🎤</button><button onclick="st()">➤</button></div>`;
+  const load=async()=>{if(V!='chat')return;const l=await api('/msg/'+id),b=$('#ms');if(!b)return;const bot=innerHeight+scrollY>=document.body.scrollHeight-120;
+   b.innerHTML=l.map(m=>`<div class="m ${m.me?'me':''}">${m.deleted?'<i>🚫 تم حذف هذه الرسالة</i>':media(m.media,m.mtype)+(m.text?`<span>${esc(m.text)}</span>`:'')}<small>${ago(m.ts)}${m.edited?' · معدّلة':''}${m.me&&!m.deleted?` <u onclick="mo(${m.id},${!m.media},this)" data-t="${esc(m.text)}">⋯</u>`:''}</small></div>`).join('')||'<p class="mu">ابدأ المحادثة بإرسال رسالة</p>';
+   if(bot)scrollTo(0,document.body.scrollHeight)};
+  await load();scrollTo(0,document.body.scrollHeight);poll=setInterval(load,3000)}
+};
+/* ---- actions ---- */
+async function pub(b){const f=new FormData();f.append('text',$('#pt').value);const x=$('#pf').files[0];if(x)f.append('file',x);b.disabled=true;b.textContent='جاري النشر...';
+ try{await api('/posts',{method:'POST',body:f});go('home')}catch(e){alert(e.message);b.disabled=false;b.textContent='نشر'}}
+async function like(id,b){const d=await api('/like/'+id,{method:'POST'});b.className=d.on?'lk':'';b.innerHTML=(d.on?'❤️':'🤍')+' <span>'+d.n+'</span>'}
+async function cm(id){const c=$('#c'+id);if(c.innerHTML){c.innerHTML='';return}const l=await api('/comments/'+id);
+ c.innerHTML=l.map(x=>`<p><b>${esc(x.user.username)}</b> ${esc(x.text)}</p>`).join('')+`<div class="in"><input id="ci${id}" placeholder="اكتب تعليق..."><button onclick="addc(${id})">إرسال</button></div>`}
+async function addc(id){const i=$('#ci'+id);if(!i.value.trim())return;await api('/comments/'+id,{method:'POST',json:{text:i.value}});$('#c'+id).innerHTML='';cm(id)}
+async function fl(id,n){await api('/follow/'+id,{method:'POST'});go('profile',n)}
+async function snd(f){try{await api('/msg/'+CH,{method:'POST',body:f});go('chat',CH)}catch(e){alert(e.message)}}
+async function st(){const i=$('#ct');if(!i.value.trim())return;const f=new FormData();f.append('text',i.value);i.value='';snd(f)}
+function sf(){const f=new FormData();f.append('file',$('#cf').files[0]);snd(f)}
+async function rec(){if(mr&&mr.state=='recording')return mr.stop();
+ try{const s=await navigator.mediaDevices.getUserMedia({audio:true});mr=new MediaRecorder(s);const ch=[];mr.ondataavailable=e=>ch.push(e.data);
+  mr.onstop=()=>{s.getTracks().forEach(t=>t.stop());const f=new FormData();f.append('file',new Blob(ch,{type:mr.mimeType}),'voice.'+(mr.mimeType.includes('mp4')?'m4a':'webm'));snd(f)};
+  mr.start();$('#mic').textContent='⏹'}catch{alert('لازم تسمح باستخدام الميكروفون (ويحتاج الموقع https)')}}
+function sheet(items){const d=document.createElement('div');d.className='sh';d.innerHTML='<div>'+items.map((x,i)=>`<button data-i="${i}">${x[0]}</button>`).join('')+'<button>إلغاء</button></div>';
+ d.onclick=e=>{const i=e.target.dataset.i;d.remove();if(i!=null)items[i][1]()};document.body.append(d)}
+function mo(id,txt,el){const old=el.dataset.t;sheet([...(txt?[['✏️ تعديل الرسالة',async()=>{const x=prompt('عدّل الرسالة',old);if(x&&x.trim()){await api('/msg/edit/'+id,{method:'POST',json:{text:x}});go('chat',CH)}}]]:[]),
+ ['🗑️ حذف لدى الجميع',async()=>{await api('/msg/del/'+id,{method:'POST'});go('chat',CH)}]])}
+function opts(){sheet([['👤 الملف الشخصي',()=>go('profile',CU.username)],
+ ['🧹 حذف الدردشة',async()=>{if(confirm('حذف المحادثة من عندك؟')){await api('/chat/'+CH+'/clear',{method:'POST'});go('chat',CH)}}],
+ [CU.blocked?'✅ إلغاء الحظر':'🚫 حظر المستخدم',async()=>{await api('/block/'+CH,{method:'POST'});go('chats')}]])}
+boot();
+</script>
+</body>
+    </html>
+    
