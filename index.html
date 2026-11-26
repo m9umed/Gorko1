@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>قلب جليدي 💙❄️</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -133,6 +133,7 @@
             z-index: 1;
             display: none;
             width: 100%;
+            height: 100vh;
             height: 100dvh;
             background: var(--ice-glass);
             backdrop-filter: blur(24px) saturate(150%);
@@ -359,7 +360,7 @@
         #avatar-viewer {
             display: none;
             position: fixed;
-            inset: 0;
+            top: 0; right: 0; bottom: 0; left: 0;
             z-index: 100;
             background: rgba(2, 6, 23, 0.92);
             flex-direction: column;
@@ -500,7 +501,7 @@
         @media (hover: none) {
             .msg.sent:not(.deleted) .msg-menu-btn { display: flex; }
         }
-        body { height: 100dvh; }
+        body { height: 100vh; height: 100dvh; }
 
         /* الجوال: قائمة الدردشات بشاشة كاملة، وعند الضغط على دردشة تُفتح بشاشة كاملة */
         @media (max-width: 900px) {
@@ -528,6 +529,7 @@
         <input type="password" id="password-input" placeholder="كلمة المرور...">
         <button id="login-btn" onclick="login()">دخول ❄️</button>
         <p id="auth-error" style="color: #fca5a5; margin-top: 12px; font-size: 0.9rem;"></p>
+        <p style="margin-top: 10px; font-size: 0.7rem; opacity: 0.5;">نسخة 3</p>
     </div>
 
     <!-- واجهة التطبيق -->
@@ -581,6 +583,4 @@
                     <div style="text-align: center; margin: 15px 0;">
                         <div id="settings-avatar-preview" class="avatar" style="width: 80px; height: 80px; font-size: 1.8rem; margin: 0 auto 10px;"></div>
                         <label style="display: inline-block; padding: 6px 14px; background: rgba(56, 189, 248, 0.2); border: 1px solid var(--ice-border); border-radius: 10px; cursor: pointer; font-size: 0.85rem;">
-                            تغيير صورة الحساب 📷
-                            <input type="file" id="avatar-file-input" accept="image/*" style="display: none;" onchange="previewAvatar(event)">
-            
+                            تغيير صورة الحساب ?
