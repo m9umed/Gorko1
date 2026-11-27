@@ -1,199 +1,144 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>RAMALES</title>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<title>Mi</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0d1321;--c:#162036;--c2:#1f2d4a;--t:#f1f4fb;--m:#8d9bbd;--a:#ffb703;--b:#ff5d73;--g:linear-gradient(135deg,#ffb703,#ff5d73)}
-
-:root[data-th=light]{--bg:#f3f5fa;--c:#fff;--c2:#e7ebf4;--t:#151a2a;--m:#66718f}
-*{box-sizing:border-box;margin:0;font-family:Cairo,system-ui,Tahoma,sans-serif}
-body{background:var(--bg);color:var(--t);min-height:100vh}
-[hidden]{display:none!important}
-button,input,textarea{font:inherit;color:inherit;border:0;outline:0}
-button{cursor:pointer;background:none}
-input,textarea{background:var(--c2);border-radius:14px;padding:12px 14px;width:100%}
-.mu{color:var(--m)}
-#auth{min-height:100vh;display:grid;place-items:center;padding:20px}
-.box{width:100%;max-width:400px;background:var(--c);border-radius:26px;padding:28px;display:grid;gap:12px;text-align:center}
-.box h1,.logo{font-weight:800;letter-spacing:2px;background:var(--g);-webkit-background-clip:text;background-clip:text;color:transparent}
-.box h1{font-size:38px}
-.tabs{display:flex;background:var(--c2);border-radius:14px;padding:4px}
-.tabs button{flex:1;padding:9px;border-radius:11px;color:var(--m)}
-.tabs .on{background:var(--g);color:#1a1200;font-weight:600}
-.avp{width:92px;height:92px;border-radius:50%;background:var(--c2);margin:auto;display:grid;place-items:center;overflow:hidden;cursor:pointer;font-size:28px;position:relative}
-.avp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.btn{background:var(--g);color:#1a1200;font-weight:800;padding:12px 20px;border-radius:14px}
-.btn2{background:var(--c2);padding:12px 20px;border-radius:14px}
-.er{color:var(--b);min-height:20px;font-size:14px}
-header{position:fixed;top:0;inset-inline:0;height:56px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:5;max-width:600px;margin:auto}
-.logo{font-size:24px}
-header div{display:flex;gap:6px}
-header button{font-size:22px;position:relative;padding:6px 8px}
-i.bd,header i{background:var(--b);color:#fff;font-style:normal;font-size:11px;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
-header i{position:absolute;top:0;inset-inline-start:0}
-i:empty{display:none}
-main{max-width:600px;margin:auto;padding:68px 12px 90px}
-nav{position:fixed;bottom:0;inset-inline:0;max-width:600px;margin:auto;background:color-mix(in srgb,var(--c) 95%,transparent);backdrop-filter:blur(10px);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));border-radius:22px 22px 0 0;z-index:5}
-nav button{flex:1;display:grid;justify-items:center;font-size:21px;color:var(--m);padding:4px}
-nav span{font-size:11px}
-nav .on{color:var(--a)}
-nav button[data-t=add]{font-size:26px;color:#1a1200}
-nav button[data-t=add] b{background:var(--g);width:46px;height:46px;border-radius:16px;display:grid;place-items:center;margin-top:-18px;font-weight:600}
-.card{background:var(--c);border-radius:20px;padding:14px;margin-bottom:12px}
-.row{display:flex;align-items:center;gap:10px;cursor:pointer}
-.row small{margin-inline-start:auto}
-.fx{flex:1}
-.av{width:42px;height:42px;border-radius:50%;object-fit:cover;background:var(--g);color:#1a1200;display:grid;place-items:center;font-weight:800;flex:none}
-.av.big{width:96px;height:96px;font-size:36px}
-.tx{margin:10px 0;white-space:pre-wrap;line-height:1.7}
-.md{width:100%;max-height:70vh;border-radius:14px;margin-top:8px;background:#000;object-fit:contain;display:block}
-audio{width:100%;max-width:240px}
-.acts{display:flex;gap:18px;margin-top:10px}
-.acts button{font-size:16px;color:var(--m)}
-.acts .lk{color:var(--b)}
-.cms p{margin-top:8px;font-size:14px}
-.in{display:flex;gap:8px;margin-top:10px}
-.in button{color:var(--a);font-weight:600}
-.ct{text-align:center;display:grid;gap:10px}
-.ct div{display:flex;gap:10px}
-.ct a{flex:1;padding:10px;border-radius:14px;color:#fff;text-decoration:none;font-weight:600}
-.wa{background:#1fa855}.ig{background:linear-gradient(45deg,#f9a03f,#e1306c,#833ab4)}
-textarea{min-height:120px;resize:vertical;margin:10px 0}
-.fl{display:block;background:var(--c2);padding:12px;border-radius:14px;margin-bottom:12px;cursor:pointer}
-.fl::after{content:attr(data-n);color:var(--a);margin-inline-start:8px}
-.pf{text-align:center;display:grid;gap:10px;justify-items:center}
-.st{display:flex;gap:22px;color:var(--m)}.st b{color:var(--t);display:block;font-size:18px}
-.row2{display:flex;gap:8px}
-.ttl{margin:6px 4px 12px}
-.ch{display:grid;gap:8px}
-.chh{position:sticky;top:56px;z-index:3}
-#ms{display:grid;gap:8px;padding-bottom:70px}
-.m{max-width:78%;background:var(--c);padding:10px 14px;border-radius:20px 20px 20px 6px;justify-self:start;display:grid;gap:4px;box-shadow:0 1px 3px #0003}
-.m.me{background:var(--g);color:#1a1200;justify-self:end;border-radius:20px 20px 6px 20px}
-.m small{font-size:11px;opacity:.7}
-.m u{text-decoration:none;cursor:pointer;float:left}
-.bar{position:fixed;bottom:0;inset-inline:0;max-width:600px;margin:auto;background:var(--c);padding:8px 8px calc(8px + env(safe-area-inset-bottom));display:flex;gap:6px;align-items:center;z-index:6}
-.bar button,.bar label{font-size:22px;padding:4px 6px;cursor:pointer}
-.sh{position:fixed;inset:0;background:#000a;z-index:9;display:flex;align-items:flex-end}
-.sh div{background:var(--c);width:100%;max-width:600px;margin:auto;border-radius:22px 22px 0 0;padding:12px;display:grid;gap:4px}
-.sh button{padding:14px;border-radius:12px;background:var(--c2)}
-nav span{font-size:10px}
-.bar input{border-radius:24px}
-.bar .snd{background:var(--g);color:#1a1200;border-radius:50%;width:42px;height:42px;display:grid;place-items:center;font-size:18px;padding:0}
-.sb{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 14px}
-.sc{display:grid;justify-items:center;gap:4px;flex:none;width:68px;cursor:pointer}
-.sc small{font-size:11px;max-width:68px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ring{padding:3px;border-radius:50%;background:var(--g)}.ring.no{background:var(--c2)}
-.ring .av{border:3px solid var(--bg);width:56px;height:56px}
-#sv{position:fixed;inset:0;background:#000;z-index:20;display:grid;place-items:center;color:#fff}
-#sv img,#sv video{max-width:100%;max-height:100vh}
-.pg{position:absolute;top:8px;inset-inline:8px;display:flex;gap:4px;z-index:2}
-.pg i{flex:1;height:3px;background:#fff4;border-radius:2px;overflow:hidden}.pg i.d{background:#fff}
-.pg b{display:block;height:100%;background:#fff;width:0}.pg b.run{animation:pr 5s linear forwards}
-@keyframes pr{to{width:100%}}
-.sh2{position:absolute;top:18px;inset-inline:12px;z-index:2}.sh2 button{color:#fff;font-size:20px}
-.mw{position:relative}.hrt{position:absolute;inset:0;display:grid;place-items:center;font-size:90px;animation:hp .7s;pointer-events:none}
-@keyframes hp{0%{transform:scale(0);opacity:1}60%{transform:scale(1.2)}100%{opacity:0}}
-.tg{color:var(--a);cursor:pointer}
-.gr{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:12px}
-.gr div{aspect-ratio:1;background:var(--c2);overflow:hidden;cursor:pointer;display:grid;place-items:center;font-size:12px;padding:4px}
-.gr img,.gr video{width:100%;height:100%;object-fit:cover}
-</style>
-</head>
-<body>
-<script>window.onerror=function(m,s,l){var d=document.createElement('pre');d.style.cssText='color:#ff5d73;padding:16px;white-space:pre-wrap;direction:ltr;position:relative;z-index:99';d.textContent='خطأ: '+m+' (سطر '+l+')';document.body.appendChild(d)}</script>
-<div id="ld" style="min-height:100vh;display:grid;place-items:center;text-align:center"><div><h1 class="logo" style="font-size:38px">RAMALES</h1><p class="mu">جاري التحميل...</p></div></div>
-<div id="auth" hidden>
- <div class="box">
-  <h1>RAMALES</h1><p class="mu">شارك لحظاتك مع أصدقائك</p>
-  <div class="tabs"><button id="tl" class="on" onclick="tab(0)">تسجيل الدخول</button><button id="tr" onclick="tab(1)">إنشاء حساب</button></div>
-  <label class="avp" id="avl" hidden>📷<img id="avp" hidden><input type="file" id="aa" accept="image/*" hidden onchange="pv()"></label>
-  <input id="em" type="email" placeholder="الإيميل" hidden>
-  <input id="un" placeholder="اسم المستخدم أو الإيميل">
-  <input id="pw" type="password" placeholder="كلمة المرور">
-  <input id="pw2" type="password" placeholder="تأكيد كلمة المرور" hidden>
-  <button class="btn" onclick="sub()">متابعة</button>
-  <p id="er" class="er"></p>
- </div>
-</div>
-<div id="app" hidden>
- <header><b class="logo">RAMALES</b>
-  <div><button id="th" onclick="theme()">🌙</button><button onclick="go('notifs')">🔔<i id="bn"></i></button><button onclick="go('chats')">💬<i id="bm"></i></button></div></header>
- <main id="v"></main>
- <nav>
-  <button data-t="home" onclick="go('home')">🏠<span>الرئيسية</span></button>
-  <button data-t="add" onclick="go('add')"><b>＋</b></button>
-  <button data-t="videos" onclick="go('videos')">🎬<span>فيديوهات</span></button>
-  <button data-t="search" onclick="go('search')">🔍<span>بحث</span></button>
-  <button data-t="me" onclick="go('profile',ME.username)">👤<span>حسابي</span></button>
- </nav>
-</div>
+:root{--bg:#14111f;--sf:#1f1b2e;--tx:#f4f0e8;--mu:#9a94ad;--ac:#6ee7c8;--ac2:#a78bfa;--rd:#ff6b81}
+*{box-sizing:border-box;margin:0;font-family:Tajawal,system-ui,sans-serif}
+body{background:var(--bg);color:var(--tx);max-width:480px;margin:auto;min-height:100vh;padding-bottom:64px}
+a,button,label{cursor:pointer}input,textarea,button{font:inherit;color:inherit}
+input,textarea{background:var(--sf);border:1px solid #3a3452;border-radius:10px;padding:10px;width:100%;margin:5px 0}
+button{background:var(--ac);color:#14111f;border:0;border-radius:10px;padding:9px 16px;font-weight:700}
+button.g{background:var(--sf);color:var(--tx);border:1px solid #3a3452}button.d{background:var(--rd);color:#fff}
+.logo{font-size:44px;font-weight:800;background:linear-gradient(90deg,var(--ac),var(--ac2));-webkit-background-clip:text;color:transparent}
+#au{padding:60px 24px;text-align:center}#au p{color:var(--mu);margin:10px 0}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;position:sticky;top:0;background:var(--bg);z-index:5}
+header .logo{font-size:28px}
+nav{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:auto;display:flex;background:var(--sf);z-index:5;padding-bottom:env(safe-area-inset-bottom)}
+nav b{flex:1;text-align:center;padding:14px 0;font-size:20px;opacity:.5;cursor:pointer}nav b.on{opacity:1}
+.av{width:40px;height:40px;border-radius:50%;object-fit:cover;background:var(--ac2);display:flex;align-items:center;justify-content:center;font-weight:800;color:#14111f;flex:none}
+.h{display:flex;align-items:center;gap:10px;padding:8px 12px}.sp{flex:1}
+.card{margin-bottom:18px}.card img,.card video{width:100%;max-height:560px;object-fit:cover;display:block;background:#000}
+.ac{padding:8px 12px;display:flex;gap:14px;align-items:center}.card p{padding:0 12px}
+.stl{display:flex;gap:12px;overflow-x:auto;padding:8px 12px}.stl div{text-align:center;font-size:12px;flex:none;cursor:pointer}
+.ring{padding:3px;border-radius:50%;background:linear-gradient(135deg,var(--ac),var(--ac2));display:inline-block}.ring .av{border:3px solid var(--bg);width:58px;height:58px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}.grid img,.grid video{width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer}
+.grid .t{aspect-ratio:1;background:var(--sf);padding:8px;font-size:13px;overflow:hidden;cursor:pointer}
+.pf{padding:14px}.pf .av{width:84px;height:84px;font-size:32px}.cnt{display:flex;gap:22px;margin:10px 0;text-align:center}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+#reels{height:calc(100vh - 56px);overflow-y:scroll;scroll-snap-type:y mandatory}
+.rl{height:calc(100vh - 56px);scroll-snap-align:start;position:relative;background:#000}
+.rl video{width:100%;height:100%;object-fit:cover}
+.rl .ov{position:absolute;bottom:14px;right:12px;left:70px;text-shadow:0 1px 4px #000}
+.rl .sd{position:absolute;bottom:20px;left:12px;display:flex;flex-direction:column;gap:18px;align-items:center;font-size:24px;text-shadow:0 1px 4px #000}
+.mdw{position:fixed;inset:0;background:#000c;z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.md{background:var(--bg);width:100%;max-width:480px;max-height:85vh;overflow:auto;padding:16px;border-radius:18px 18px 0 0}
+.st-v{position:fixed;inset:0;background:#000;z-index:30;display:flex;align-items:center;justify-content:center}.st-v img,.st-v video{max-width:100%;max-height:100%}
+.st-v .tp{position:absolute;top:14px;right:14px;left:14px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.li{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer}.li small{color:var(--mu);display:block}
+.ch{display:flex;flex-direction:column;height:calc(100vh - 64px)}#ms{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
+.m{max-width:78%;padding:8px 12px;border-radius:16px;background:var(--sf);align-self:flex-start;word-break:break-word}.m.me{background:#2d6b5e;align-self:flex-end}
+.m img,.m video{max-width:100%;border-radius:10px;margin-bottom:4px}.m small{display:block;color:#ffffff99;font-size:11px;margin-top:2px}.m a{margin-inline-end:8px}
+.in{display:flex;gap:6px;padding:8px;align-items:center}.in input{margin:0}
+.ad{padding:14px}.tabs{display:flex;gap:6px;margin:12px 0}.tabs button{flex:1}
+.ar{background:var(--sf);border-radius:12px;padding:12px;margin-bottom:8px}.ar small{color:var(--mu);display:block;margin:2px 0}
+.big{font-size:38px;font-weight:800;color:var(--ac)}.e{text-align:center;color:var(--mu);padding:40px}
+</style></head><body>
+<div id="app"></div><div id="ov"></div>
 <script>
-const $=s=>document.querySelector(s);
-document.documentElement.dataset.th=localStorage.th||'dark';
-function theme(){const l=document.documentElement.dataset.th!='light';document.documentElement.dataset.th=localStorage.th=l?'light':'dark';$('#th').textContent=l?'☀️':'🌙'}
-let T=localStorage.t,ME,V='home',A,CH=0,CU,poll,reg=0,mr,ST=[],EXH='';
-const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const api=async(p,o={})=>{o.headers={'X-Token':T||''};if(o.json){o.headers['Content-Type']='application/json';o.body=JSON.stringify(o.json)}
- const r=await fetch('/api'+p,o),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'حدث خطأ');return d};
-const ago=t=>{const s=Date.now()/1000-t;return s<60?'الآن':s<3600?Math.floor(s/60)+' د':s<86400?Math.floor(s/3600)+' س':Math.floor(s/86400)+' يوم'};
-const av=(u,c='')=>u.avatar?`<img class="av ${c}" src="${u.avatar}">`:`<div class="av ${c}">${esc(u.username[0])}</div>`;
-const media=(m,t)=>!m?'':t=='image'?`<img class="md" src="${m}">`:t=='video'?`<video class="md" src="${m}" controls playsinline></video>`:t=='audio'?`<audio src="${m}" controls></audio>`:`<a href="${m}" target="_blank">📎 ملف</a>`;
+let T=localStorage.t,ME=null,poll=null,cur='home',adT=null;
+const $=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=async(a,d={})=>{try{const r=await(await fetch('/api',{method:'POST',body:JSON.stringify({a,t:T,...d})})).json();if(r.err){if(r.err=='auth'){logout();return null}alert(r.err);return null}return r}catch(e){alert('تعذّر الاتصال بالسيرفر');return null}};
+const rd=f=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result);x.readAsDataURL(f)});
+const av=u=>u.av?`<img class=av src="${u.av}">`:`<div class=av>${E(u.name[0]).toUpperCase()}</div>`;
+const med=p=>!p.media?'':p.mt=='v'?`<video src="${p.media}" controls playsinline></video>`:`<img src="${p.media}">`;
+const tm=t=>new Date(t*1000).toLocaleString('ar',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'});
+function modal(h){$('#ov').innerHTML=`<div class=mdw onclick="if(event.target==this)closeM()"><div class=md>${h}</div></div>`}
+function closeM(){$('#ov').innerHTML=''}
+function logout(){localStorage.removeItem('t');T=null;ME=null;clearInterval(poll);clearInterval(adT);authV()}
 
-/* ---- auth ---- */
-function tab(r){reg=r;$('#tl').className=r?'':'on';$('#tr').className=r?'on':'';['#avl','#em','#pw2'].forEach(s=>$(s).hidden=!r);$('#un').placeholder=r?'اسم المستخدم':'اسم المستخدم أو الإيميل';$('#er').textContent=''}
-function pv(){const f=$('#aa').files[0];if(f){$('#avp').src=URL.createObjectURL(f);$('#avp').hidden=false}}
-async function sub(){const e=$('#er');e.textContent='';try{let d;
- if(reg){if($('#pw').value!=$('#pw2').value)return e.textContent='كلمتا المرور غير متطابقتين';
-  const f=new FormData();f.append('email',$('#em').value);f.append('username',$('#un').value);f.append('password',$('#pw').value);if($('#aa').files[0])f.append('avatar',$('#aa').files[0]);
-  d=await api('/register',{method:'POST',body:f})}
- else d=await api('/login',{method:'POST',json:{user:$('#un').value,password:$('#pw').value}});
- T=localStorage.t=d.token;boot()}catch(x){e.textContent=x.message}}
-function out(){localStorage.removeItem('t');location.reload()}
-async function boot(){if(!T){$('#ld').hidden=true;$('#auth').hidden=false;return}
- try{ME=await api('/me')}catch{return out()}
- $('#ld').hidden=true;$('#auth').hidden=true;$('#app').hidden=false;$('#th').textContent=localStorage.th=='light'?'☀️':'🌙';const hp=location.hash.match(/^#post(\d+)/);hp?go('post',+hp[1]):go('home');badges();setInterval(badges,5000)}
-async function badges(){try{const b=await api('/badges');$('#bn').textContent=b.n||'';$('#bm').textContent=b.m||''}catch{}}
+/* ---------- auth ---------- */
+function authV(){$('#app').innerHTML=`<div id=au><div class=logo>Mi</div><p>شارك لحظاتك مع من تحب</p>
+<input id=un placeholder="اسم المستخدم" autocapitalize=off><input id=pw type=password placeholder="كلمة السر">
+<div class=row style="justify-content:center"><button onclick="go('login')">تسجيل الدخول</button><button class=g onclick="go('reg')">إنشاء حساب</button></div></div>`}
+async function go(a){const r=await api(a,{name:$('#un').value.trim(),pw:$('#pw').value});if(!r)return;T=r.t;localStorage.t=T;if(r.admin){adminV();return}ME=r.me;main()}
 
-/* ---- views ---- */
-async function go(v,a){V=v;A=a;clearInterval(poll);
- document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==(v=='profile'&&a==ME.username?'me':v)));
- $('#v').innerHTML='<p class="mu">جاري التحميل...</p>';
- try{await R[v](a)}catch(e){$('#v').innerHTML=`<p class="mu">${esc(e.message)}</p>`}scrollTo(0,0)}
-const tags=s=>esc(s).replace(/#([\w\u0600-\u06FF]+)/g,'<a class="tg" onclick="event.stopPropagation();go(\'tag\',\'$1\')">#$1</a>').replace(/@([\w\u0600-\u06FF.]+)/g,'<a class="tg" onclick="event.stopPropagation();go(\'profile\',\'$1\')">@$1</a>');
-const gt=p=>`<div onclick="go('post',${p.id})">${p.mtype=='video'?`<video src="${p.media}#t=0.1" muted playsinline></video>`:p.media?`<img src="${p.media}">`:esc((p.text||'').slice(0,60))}</div>`;
-const post=p=>`<article class="card" id="p${p.id}"><div class="row"><div class="row fx" onclick="go('profile','${p.user.username}')">${av(p.user)}<b>${esc(p.user.username)}</b><small class="mu">${ago(p.ts)}</small></div>${p.user.id==ME.id?`<button onclick="pm(${p.id})">⋯</button>`:''}</div>
-${p.text?`<p class="tx">${tags(p.text)}</p>`:''}<div class="mw" ondblclick="dl(${p.id})">${media(p.media,p.mtype)}</div>
-<div class="acts"><button class="${p.liked?'lk':''}" id="lk${p.id}" onclick="like(${p.id})">${p.liked?'❤️':'🤍'} <span>${p.likes}</span></button><button onclick="cm(${p.id})">💬 ${p.comments}</button><button onclick="sh(${p.id})">🔗</button><button style="margin-inline-start:auto" onclick="sv(${p.id},this)">${p.saved?'🔖':'📑'}</button></div><div class="cms" id="c${p.id}"></div></article>`;
-const storyBar=()=>{const mine=ST.find(s=>s.user.id==ME.id);return `<div class="sb"><label class="sc"><div class="ring ${mine?'':'no'}" ${mine?`onclick="event.preventDefault();story(${ST.indexOf(mine)})"`:''}>${av(ME)}</div><small>قصتك ＋</small><input type="file" accept="image/*,video/*" hidden onchange="addst(this)"></label>`+ST.filter(s=>s!=mine).map(s=>`<div class="sc" onclick="story(${ST.indexOf(s)})"><div class="ring">${av(s.user)}</div><small>${esc(s.user.username)}</small></div>`).join('')+'</div>'};
-const R={
- async home(){const [l,sx]=await Promise.all([api('/feed'),api('/stories')]);ST=sx;$('#v').innerHTML=storyBar()+`<section class="card ct"><b>تواصل مع مطوّري التطبيق RAMALES</b><div><a class="wa" href="https://wa.me/972567101138" target="_blank">واتساب</a><a class="ig" href="https://instagram.com/m_2007d_d" target="_blank">انستجرام</a></div></section>`+(l.map(post).join('')||'<p class="mu">لا يوجد منشورات بعد. كن أول من ينشر!</p>')},
- add(){$('#v').innerHTML=`<div class="card"><b>منشور جديد</b><textarea id="pt" placeholder="شو في بالك؟"></textarea><label class="fl">📷 إضافة صورة أو فيديو<input type="file" id="pf" accept="image/*,video/*" hidden onchange="this.parentNode.dataset.n=this.files[0]?this.files[0].name:''"></label><button class="btn" onclick="pub(this)">نشر</button></div>`},
- async search(){const e=await api('/explore');EXH=`<div class="gr">${e.map(gt).join('')}</div>`;$('#v').innerHTML=`<input id="sq" placeholder="ابحث عن شخص أو #هاشتاغ..." oninput="dq()"><div id="sr" style="margin-top:12px">${EXH}</div>`;$('#sq').focus()},
- async post(id){$('#v').innerHTML=post(await api('/post/'+id))},
- async tag(t){const l=await api('/feed?tag='+encodeURIComponent(t));$('#v').innerHTML=`<h3 class="ttl">#${esc(t)}</h3>`+(l.map(post).join('')||'<p class="mu">لا توجد منشورات</p>')},
- async saved(){const l=await api('/saved');$('#v').innerHTML='<h3 class="ttl">المحفوظات 🔖</h3>'+(l.map(post).join('')||'<p class="mu">ما حفظت شي بعد</p>')},
- async people(a){const [i,k]=a.split(':'),l=await api('/follows/'+i+'/'+k);$('#v').innerHTML=`<h3 class="ttl">${k=='followers'?'المتابعون':'يتابع'}</h3>`+l.map(u=>`<div class="card row" onclick="go('profile','${u.username}')">${av(u)}<b>${esc(u.username)}</b></div>`).join('')},
- async edit(){const u=await api('/user/'+encodeURIComponent(ME.username));$('#v').innerHTML=`<div class="card pf"><label style="cursor:pointer">${av(ME,'big')}<input type="file" id="ea" accept="image/*" hidden></label><small class="mu">اضغط على الصورة لتغييرها</small><textarea id="eb" maxlength="150" placeholder="نبذة عنك...">${esc(u.bio)}</textarea><button class="btn" onclick="svp()">حفظ</button></div>`},
- async videos(){const l=await api('/feed?type=video');$('#v').innerHTML=l.map(post).join('')||'<p class="mu">لا يوجد فيديوهات بعد</p>'},
- async profile(n){const u=await api('/user/'+encodeURIComponent(n)),l=await api('/feed?user='+u.id),m=u.id==ME.id;
-  $('#v').innerHTML=`<div class="card pf">${av(u,'big')}<h2>${esc(u.username)}</h2>${u.bio?`<p class="tx">${tags(u.bio)}</p>`:''}<div class="st"><span><b>${u.posts}</b>منشور</span><span onclick="go('people','${u.id}:followers')"><b>${u.followers}</b>متابع</span><span onclick="go('people','${u.id}:following')"><b>${u.following}</b>يتابع</span></div>
-  ${m?'<div class="row2"><button class="btn2" onclick="go(\'edit\')">تعديل الملف</button><button class="btn2" onclick="go(\'saved\')">🔖 المحفوظات</button><button class="btn2" onclick="out()">خروج</button></div>':`<div class="row2"><button class="btn" onclick="fl(${u.id},'${u.username}')">${u.i_follow?'إلغاء المتابعة':'متابعة'}</button>${u.mutual?`<button class="btn2" onclick="go('chat',${u.id})">مراسلة</button>`:''}</div>`}</div><div class="gr">${l.map(gt).join('')}</div>`+(l.length?'':'<p class="mu">لا يوجد منشورات</p>')},
- async notifs(){const l=await api('/notifs');$('#v').innerHTML='<h3 class="ttl">الإشعارات</h3>'+(l.map(n=>`<div class="card row" onclick="go('profile','${n.user.username}')">${av(n.user)}<div><b>${esc(n.user.username)}</b> ${n.kind=='follow'?'بدأ بمتابعتك. تابعه بالمقابل لتبدأوا الدردشة':'تابعك بالمقابل، صار بإمكانكم الدردشة 💬'}<br><small class="mu">${ago(n.ts)}</small></div></div>`).join('')||'<p class="mu">لا توجد إشعارات</p>');badges()},
- async chats(){const l=await api('/chats');$('#v').innerHTML='<h3 class="ttl">الدردشات</h3>'+(l.map(c=>`<div class="card row" onclick="go('chat',${c.user.id})">${av(c.user)}<div class="fx"><b>${esc(c.user.username)}</b><br><small class="mu">${esc(c.last||'ابدأ المحادثة')}</small></div><i class="bd">${c.unread||''}</i></div>`).join('')||'<p class="mu">تابع شخصاً ويتابعك بالمقابل لتظهر الدردشة هنا</p>')},
- async chat(id){CH=id;CU=await api('/uid/'+id);
-  $('#v').innerHTML=`<div class="ch"><div class="card row chh" onclick="opts()">${av(CU)}<b class="fx">${esc(CU.username)}</b><span class="mu">⋮</span></div><div id="ms"></div></div>
-  <div class="bar"><label>📎<input type="file" id="cf" hidden onchange="sf()"></label><input id="ct" placeholder="اكتب رسالة..." onkeydown="if(event.key=='Enter')st()"><button id="mic" onclick="rec()">🎤</button><button class="snd" onclick="st()">➤</button></div>`;
-  const load=async()=>{if(V!='chat')return;const l=await api('/msg/'+id),b=$('#ms');if(!b)return;const bot=innerHeight+scrollY>=document.body.scrollHeight-120;
-   b.innerHTML=l.map(m=>`<div class="m ${m.me?'me':''}">${m.deleted?'<i>🚫 تم حذف هذه الرسالة</i>':media(m.media,m.mtype)+(m.text?`<span>${esc(m.text)}</span>`:'')}<small>${ago(m.ts)}${m.edited?' · معدّلة':''}${m.me?(m.seen?' ✓✓':' ✓'):''}${m.me&&!m.deleted?` <u onclick="mo(${m.id},${!m.media},this)" data-t="${esc(m.text)}">⋯</u>`:''}</small></div>`).join('')||'<p class="mu">ابدأ المحادثة بإرسال رسالة</p>';
-   if(bot)scrollTo(0,document.body.scrollHeight)};
-  await load();scrollTo(0,document.body.scrollHeight);poll=setInterval(load,3000)}
-};
-/* ---- actions ---- */
-async function pub(b){const f=new FormData();f.append('text',$('#pt').value);const x=$('#pf').files[0];if(x)f.append('file',x);b.disabled=true;b.textContent='جاري النشر...';
- try{await api('/posts',{method:'POST',body:f});go('home')}catch(e){alert(e.message);b.disabled=false;b.textContent='نشر'}}
-async function like(id){const d=await api('/like/'+id,{method:'POST'}),b=$('#lk'+id);b.className=d.on?'lk':'';b.innerHTML=(d.on?'❤️':'🤍')+' <span>'+d.n+'</span>'}
-async function dl(id){const b=$('#lk'+id);if(b&&b.classN
+/* ---------- main shell ---------- */
+function main(){$('#app').innerHTML=`<header><div class=logo>Mi</div><a onclick="show('notifs')" style="font-size:22px">🔔</a></header><div id=v></div>
+<nav><b data-t=home onclick="show('home')">🏠</b><b data-t=search onclick="show('search')">🔍</b><b onclick="newM()">➕</b><b data-t=reels onclick="show('reels')">🎬</b><b data-t=chats onclick="show('chats')">💬</b><b data-t=me onclick="show('me')">👤</b></nav>`;show('home')}
+function show(t){cur=t;clearInterval(poll);document.querySelectorAll('nav b').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
+({home:homeV,search:searchV,reels:reelsV,chats:chatsV,me:()=>prof(ME.id),notifs:notifV})[t]()}
+
+/* ---------- feed / stories / posts ---------- */
+const card=p=>`<div class=card><div class=h onclick="prof(${p.u})">${av(p)}<b>${E(p.name)}</b><span class=sp></span>${p.u==ME.id?`<a onclick="event.stopPropagation();editPost(${p.id})">✏️</a><a onclick="event.stopPropagation();delPost(${p.id})">🗑</a>`:''}</div>${med(p)}
+<div class=ac><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬 ${p.cc}</a></div>${p.txt?`<p><b>${E(p.name)}</b> ${E(p.txt)}</p>`:''}</div>`;
+async function homeV(){const j=await api('feed');if(!j)return;const g={};j.stories.forEach(s=>(g[s.u]=g[s.u]||[]).unshift(s));window.SG=Object.values(g);
+V().innerHTML=`<div class=stl>${SG.map((x,i)=>`<div onclick="story(${i})"><span class=ring>${av(x[0])}</span><br>${E(x[0].name)}</div>`).join('')}</div>`+(j.posts.map(card).join('')||`<div class=e>لا توجد منشورات بعد.<br>تابع أشخاصاً أو انشر أول منشور لك.</div>`)}
+const V=()=>$('#v');
+async function like(id,el){const r=await api('like',{p:id});if(!r)return;el.textContent=r.liked?'❤️':'🤍';el.nextElementSibling.textContent=r.likes}
+async function delPost(id){if(confirm('حذف المنشور نهائياً؟')){await api('delpost',{id});show(cur)}}
+async function editPost(id){const t=prompt('عدّل النص:');if(t!==null){await api('editpost',{id,txt:t});show(cur)}}
+function story(i){const it=SG[i];let k=0;const w=document.createElement('div');w.className='st-v';
+const draw=()=>{const s=it[k];w.innerHTML=`${s.mt=='v'?`<video src="${s.media}" autoplay playsinline></video>`:`<img src="${s.media}">`}<div class=tp><span style="color:#fff">${E(s.name)} · ${tm(s.ts)}</span><span>${s.u==ME.id?`<button class=d id=sd>حذف</button> `:''}<button class=g id=sx>✕</button></span></div>`;
+$('#ov').appendChild(w);w.querySelector('#sx').onclick=()=>{w.remove();clearTimeout(tm_)};const d=w.querySelector('#sd');if(d)d.onclick=async()=>{await api('delpost',{id:s.id});w.remove();show('home')};
+w.onclick=e=>{if(e.target.tagName=='IMG'||e.target.tagName=='VIDEO'){clearTimeout(tm_);if(++k<it.length)draw();else w.remove()}};clearTimeout(tm_);tm_=setTimeout(()=>{if(++k<it.length)draw();else w.remove()},s.mt=='v'?15000:5000)};let tm_;draw()}
+async function cmts(p){const r=await api('cmts',{p});if(!r)return;modal(`<h3>التعليقات</h3>${r.c.map(c=>`<div class=li style="padding:6px 0">${av(c)}<div><b>${E(c.name)}</b> ${E(c.txt)}</div>${c.u==ME.id?`<a onclick="delC(${c.id},${p})">🗑</a>`:''}</div>`).join('')||'<div class=e>لا تعليقات</div>'}<div class=in><input id=ci placeholder="أضف تعليقاً..."><button onclick="addC(${p})">نشر</button></div>`)}
+async function addC(p){const t=$('#ci').value;if(t.trim()){await api('comment',{p,txt:t});cmts(p)}}
+async function delC(id,p){await api('delcmt',{id});cmts(p)}
+
+/* ---------- create ---------- */
+function newM(){modal(`<h3>إنشاء</h3><div class=row><button class=g onclick="K='post';$('#kd').textContent='منشور'">منشور</button><button class=g onclick="K='story';$('#kd').textContent='قصة'">قصة</button><button class=g onclick="K='reel';$('#kd').textContent='ريل (فيديو)'">ريل</button></div><p>النوع: <b id=kd>منشور</b></p>
+<input type=file id=nf accept="image/*,video/*"><textarea id=nt rows=3 placeholder="اكتب شيئاً... (يمكن نشر نص فقط)"></textarea><button onclick="publish()" id=pb>نشر</button>`);K='post'}
+let K='post';
+async function publish(){const f=$('#nf').files[0];if(f&&f.size>50e6)return alert('الملف أكبر من 50MB');if(K=='reel'&&(!f||!f.type.startsWith('video')))return alert('الريل يجب أن يكون فيديو');
+$('#pb').disabled=true;$('#pb').textContent='جارٍ الرفع...';const r=await api('new',{kind:K,media:f?await rd(f):'',txt:$('#nt').value});closeM();if(r)show(K=='reel'?'reels':'home')}
+
+/* ---------- reels ---------- */
+async function reelsV(){const j=await api('reels');if(!j)return;
+V().innerHTML=`<div id=reels>${j.posts.map(p=>`<div class=rl><video src="${p.media}" loop playsinline onclick="this.paused?this.play():this.pause()"></video><div class=ov><b onclick="prof(${p.u})">@${E(p.name)}</b><br>${E(p.txt)}</div><div class=sd><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬</a><span>${p.cc}</span>${p.u==ME.id?`<a onclick="delPost(${p.id})">🗑</a>`:''}</div></div>`).join('')||'<div class=e>لا توجد ريلز بعد</div>'}</div>`;
+const io=new IntersectionObserver(es=>es.forEach(e=>{const v=e.target.querySelector('video');e.isIntersecting?v.play().catch(()=>{}):v.pause()}),{threshold:.7});document.querySelectorAll('.rl').forEach(x=>io.observe(x))}
+
+/* ---------- search ---------- */
+function searchV(){V().innerHTML=`<div style="padding:0 14px"><input id=q placeholder="ابحث عن أصدقاء..." oninput="doS()"></div><div id=sr></div>`}
+async function doS(){const r=await api('search',{q:$('#q').value});if(r)$('#sr').innerHTML=r.us.map(u=>`<div class=li onclick="prof(${u.id})">${av(u)}<b>${E(u.name)}</b><span class=sp></span><small>${u.isf?'تتابعه':''}</small></div>`).join('')||'<div class=e>لا نتائج</div>'}
+
+/* ---------- profile ---------- */
+async function prof(id){const r=await api('profile',{id});if(!r)return;clearInterval(poll);const u=r.u,me=u.id==ME.id;
+V().innerHTML=`<div class=pf><div class=h style="padding:0;gap:16px">${av(u)}<div class=cnt style="margin:0"><div><b>${r.posts.length}</b><br>منشور</div><div><b>${r.fers}</b><br>متابع</div><div><b>${r.fing}</b><br>يتابع</div></div></div>
+<h3 style="margin-top:8px">${E(u.name)}</h3><p>${E(u.bio)}</p><div class=row>${me?`<button onclick="editProf()">تعديل الملف</button><button class=g onclick="lists()">المحظورون والمحصورون</button><button class=g onclick="logout()">خروج</button>`:
+`<button onclick="act('follow',${u.id})">${r.isf?'إلغاء المتابعة':'متابعة'}</button><button class=g onclick="chat(${u.id},'${E(u.name)}')">رسالة</button><button class=g onclick="act('restrict',${u.id})">${r.isr?'إلغاء التقييد':'تقييد'}</button><button class=d onclick="act('block',${u.id})">${r.isb?'إلغاء الحظر':'حظر'}</button>`}</div></div>
+<div class=grid>${r.posts.map(p=>p.mt=='v'?`<video src="${p.media}" onclick="one(${p.id})"></video>`:p.media?`<img src="${p.media}" onclick="one(${p.id})">`:`<div class=t onclick="one(${p.id})">${E(p.txt)}</div>`).join('')}</div>`;window.PP=r.posts}
+async function act(a,id){await api(a,{id});prof(id)}
+function one(id){const p=PP.find(x=>x.id==id);modal(card(p))}
+function editProf(){modal(`<h3>تعديل الملف الشخصي</h3><input type=file id=ef accept="image/*"><input id=en value="${E(ME.name)}"><textarea id=eb rows=3 placeholder="نبذة عنك"></textarea><button onclick="saveProf()">حفظ</button>`);api('profile',{id:ME.id}).then(r=>r&&($('#eb').value=r.u.bio))}
+async function saveProf(){const f=$('#ef').files[0],r=await api('editprofile',{name:$('#en').value,bio:$('#eb').value,av:f?await rd(f):''});if(r){ME=r.me;closeM();prof(ME.id)}}
+async function lists(){const r=await api('lists');const f=a=>a.map(u=>`<div class=li onclick="closeM();prof(${u.id})">${av(u)}<b>${E(u.name)}</b></div>`).join('')||'<div class=e>لا أحد</div>';modal(`<h3>الأشخاص المحظورون</h3>${f(r.bl)}<h3>الأشخاص المحصورون</h3>${f(r.rs)}`)}
+
+/* ---------- notifications ---------- */
+async function notifV(){const r=await api('notifs');V().innerHTML=`<h3 style="padding:0 14px">الإشعارات</h3>`+(r.n.map(n=>`<div class=li><div>${E(n.txt)}<small>${tm(n.ts)}</small></div></div>`).join('')||'<div class=e>لا إشعارات</div>')}
+
+/* ---------- chats ---------- */
+async function chatsV(){const r=await api('chats');V().innerHTML=`<div style="padding:0 14px"><h3>الرسائل</h3><p style="color:var(--mu)">للبدء بمحادثة جديدة ابحث عن شخص وافتح ملفه.</p></div>`+(r.chats.map(c=>`<div class=li onclick="chat(${c.id},'${E(c.name)}')">${av(c)}<div><b>${E(c.name)}</b><small>${E(c.last)}</small></div></div>`).join('')||'<div class=e>لا محادثات</div>')}
+let lastS='';
+function chat(o,name){clearInterval(poll);lastS='';V().innerHTML=`<div class=ch><div class=h><a onclick="show('chats')">➡️ رجوع</a><b onclick="prof(${o})">${name}</b><span class=sp></span><a onclick="delChat(${o})">🗑 حذف المحادثة</a></div><div id=ms></div><div class=in><label>📎<input type=file hidden id=cf accept="image/*,video/*" onchange="send(${o})"></label><input id=ct placeholder="اكتب رسالة..." onkeydown="if(event.key=='Enter')send(${o})"><button onclick="send(${o})">إرسال</button></div></div>`;loadM(o);poll=setInterval(()=>loadM(o),3000)}
+async function loadM(o){const r=await fetch('/api',{method:'POST',body:JSON.stringify({a:'msgs',t:T,o})}).then(x=>x.json()).catch(()=>null);if(!r||!r.m)return;const s=JSON.stringify(r.m);if(s==lastS)return;lastS=s;const b=$('#ms');if(!b)return;
+b.innerHTML=r.m.map(m=>{const me=m.f==ME.id;return `<div class="m${me?' me':''}">${m.media?(m.mt=='v'?`<video src="${m.media}" controls playsinline></video>`:`<img src="${m.media}">`):''}${E(m.txt)}<small>${me?`<a onclick="edM(${m.id},${o})">✏️</a><a onclick="dlM(${m.id},${o})">🗑</a>`:''}${tm(m.ts)}${m.edited?' · معدّلة':''}</small></div>`}).join('');b.scrollTop=b.scrollHeight}
+async function send(o){const f=$('#cf').files[0],t=$('#ct').value;if(!f&&!t.trim())return;$('#ct').value='';const r=await api('send',{o,txt:t,media:f?await rd(f):''});$('#cf').value='';lastS='';if(r)loadM(o)}
+async function edM(id,o){const t=prompt('عدّل الرسالة:');if(t!==null){await api('editmsg',{id,txt:t});lastS='';loadM(o)}}
+async function dlM(id,o){if(confirm('حذف الرسالة لدى الجميع؟')){await api('delmsg',{id});lastS='';loadM(o)}}
+async function delChat(o){if(confirm('حذف المحادثة من عندك؟')){await api('delchat',{o});show('chats')}}
+
+/* ---------- developer panel ---------- */
+let AT='acc',AD=null;
+async function adminV(){$('#app').innerHTML=`<div class=ad><div class=h style="padding:0"><div class=logo style="font-size:30px">Mi · لوحة التحكم</div><span class=sp></span><button class=g onclick="logout()">خروج</button></div>
+<div class=tabs><button onclick="AT='acc';adR()">إدارة الحسابات</button><button onclick="AT='frz';adR()">الحسابات المجمّدة</button><button onclick="AT='st';adR()">الإحصائيات</button></div><div id=ab></div></div>`;await adL();clearInterval(adT);adT=setInterval(adL,5000)}
+async function adL(){const r=await api('adm');if(r){AD=r;adR()}}
+function adR(){if(!AD||!$('#ab'))return;const us=AD.users,d=t=>t?new Date(t*1000).toLocaleString('ar'):'-';
+if(AT=='st')$('#ab').innerHTML=`<div class=ar><div class=big>${AD.online}</div>مستخدم نشط الآن</div><div class=ar><div class=big>${AD.total}</div>حساب تم إنشاؤه</div>`;
+else{const l=us.filter(u=>AT=='frz'?u.frozen:true);$('#ab').innerHTML=(AT=='acc'?`<p style="color:var(--mu)">عدد الحسابات: ${us.length}</p>`:'')+(l.map(u=>`<div class=ar><b>${E(u.name)}</b> ${u.frozen?'🧊':''}<small>تاريخ الإنشاء: ${d(u.created)}</small><small>آخر دخول: ${d(u.last)}</small><div class=row>${u.frozen?`<button onclick="adA('freeze',${u.id},0)">فك التجميد</button>`:`<button class=g onclick="adA('freeze',${u.id},1)">تجميد</button>`}<button class=d onclick="if(confirm('حذف نهائي لا رجعة فيه؟'))adA('deluser',${u.id})">حذف نهائي</button></div></div>`).join('')||'<div class=e>لا حسابات</div>')}}
+async function adA(a,id,v){await api(a,{id,v});adL()}
+
+/* ---------- start ---------- */
+(async()=>{if(!T)return authV();const r=await api('me');if(!r)return;if(r.admin)adminV();else{ME=r.me;main()}})();
+</script></body></html>
