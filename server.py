@@ -1,348 +1,189 @@
-import os, re, sqlite3, secrets
-from functools import wraps
-from flask import Flask, request, jsonify, send_from_directory, g
-from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
+#!/usr/bin/env python3
+# Mi server - no external packages needed. Run: python server.py
+# Env vars: PORT, ADMIN_USER, ADMIN_PASS (defaults 1212 / 5555 - change them on your host!)
+import http.server, json, sqlite3, os, time, base64, uuid, hashlib, re, threading, mimetypes
 
-B = os.path.dirname(os.path.abspath(__file__))
-UP = os.path.join(B, 'uploads'); os.makedirs(UP, exist_ok=True)
-DB = os.path.join(B, 'ramales.db')
-app = Flask(__name__, static_folder=None)
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
-NOW = "default (cast(strftime('%s','now') as integer))"
-with sqlite3.connect(DB) as c:
-    c.executescript(f'''
-create table if not exists users(id integer primary key,email text unique,username text unique,pw text,avatar text);
-create table if not exists sessions(token text primary key,uid int);
-create table if not exists posts(id integer primary key,uid int,text text,media text,mtype text,ts int {NOW});
-create table if not exists likes(pid int,uid int,primary key(pid,uid));
-create table if not exists comments(id integer primary key,pid int,uid int,text text,ts int {NOW});
+PORT = int(os.environ.get("PORT", 8000))
+AU, AP = os.environ.get("ADMIN_USER", "1212"), os.environ.get("ADMIN_PASS", "5555")
+D = os.path.dirname(os.path.abspath(__file__)); U = os.path.join(D, "uploads"); os.makedirs(U, exist_ok=True)
+db = sqlite3.connect(os.path.join(D, "mi.db"), check_same_thread=False); db.row_factory = sqlite3.Row
+L = threading.Lock(); ADM = set()
+db.executescript("""
+create table if not exists users(id integer primary key,name text unique,pw text,bio text default '',av text default '',created real,last real default 0,seen real default 0,frozen int default 0);
+create table if not exists posts(id integer primary key,u int,kind text,media text,mt text,txt text,ts real);
+create table if not exists likes(p int,u int,primary key(p,u));
+create table if not exists comments(id integer primary key,p int,u int,txt text,ts real);
 create table if not exists follows(a int,b int,primary key(a,b));
-create table if not exists notifs(id integer primary key,uid int,kind text,frm int,seen int default 0,ts int {NOW});
-create table if not exists msgs(id integer primary key,a int,b int,text text,media text,mtype text,edited int default 0,deleted int default 0,seen int default 0,ts int {NOW});
+create table if not exists msgs(id integer primary key,f int,t int,txt text,media text,mt text,ts real,edited int default 0);
 create table if not exists blocks(a int,b int,primary key(a,b));
-create table if not exists chatclr(uid int,o int,mid int,primary key(uid,o));''')
+create table if not exists restr(a int,b int,primary key(a,b));
+create table if not exists chatdel(u int,o int,ts real,primary key(u,o));
+create table if not exists notifs(id integer primary key,u int,txt text,ts real);
+create table if not exists sess(tok text primary key,u int);""")
 
+def row(s, a=()):
+    with L: return [dict(r) for r in db.execute(s, a).fetchall()]
+def run(s, a=()):
+    with L:
+        c = db.execute(s, a); db.commit(); return c.lastrowid
+def Hs(p): return hashlib.sha256(("mi$" + p).encode()).hexdigest()
+EXT = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov"}
+def save(d):
+    if not d or not d.startswith("data:"): return ""
+    h, b = d.split(",", 1); e = EXT.get(h[5:].split(";")[0])
+    if not e: return ""
+    n = uuid.uuid4().hex + "." + e
+    open(os.path.join(U, n), "wb").write(base64.b64decode(b)); return "/uploads/" + n
+def MT(m): return "v" if m.endswith((".mp4", ".webm", ".mov")) else ("i" if m else "")
+def N(u, t, me):
+    if u != me: run("insert into notifs(u,txt,ts) values(?,?,?)", (u, t, time.time()))
+def P(me, where, lim=60):
+    return row("select p.*,u.name,u.av,(select count(*) from likes where p=p.id) likes,(select count(*) from likes where p=p.id and u=?) liked,(select count(*) from comments where p=p.id) cc from posts p join users u on u.id=p.u where u.frozen=0 and " + where + " order by p.id desc limit ?", (me, lim))
+def wipe(i):
+    for s in ["delete from posts where u=?1", "delete from likes where u=?1", "delete from comments where u=?1", "delete from follows where a=?1 or b=?1", "delete from msgs where f=?1 or t=?1", "delete from blocks where a=?1 or b=?1", "delete from restr where a=?1 or b=?1", "delete from sess where u=?1", "delete from notifs where u=?1", "delete from users where id=?1"]:
+        run(s, (i,))
+def auth(t):
+    if t in ADM: return -1
+    r = row("select u from sess where tok=?", (t,))
+    if not r: return None
+    x = row("select frozen from users where id=?", (r[0]["u"],))
+    if not x or x[0]["frozen"]: return None
+    run("update users set seen=? where id=?", (time.time(), r[0]["u"])); return r[0]["u"]
 
-with sqlite3.connect(DB) as c:
-    c.executescript(f'''create table if not exists stories(id integer primary key,uid int,media text,mtype text,ts int {NOW});
-create table if not exists saves(pid int,uid int,primary key(pid,uid));''')
-    try: c.execute('alter table users add column bio text')
-    except sqlite3.OperationalError: pass
+def act(a, d):
+    now = time.time(); g = d.get
+    if a == "reg":
+        n, p = g("name", "").strip(), g("pw", "")
+        if not re.fullmatch(r"[A-Za-z0-9_.]{3,20}", n) or len(p) < 4: return {"err": "اسم المستخدم 3-20 حرف انجليزي أو أرقام، وكلمة السر 4 أحرف على الأقل"}
+        if n == AU: return {"err": "الاسم غير متاح"}
+        try: run("insert into users(name,pw,created,last) values(?,?,?,?)", (n, Hs(p), now, now))
+        except sqlite3.IntegrityError: return {"err": "اسم المستخدم مستخدم"}
+        a = "login"
+    if a == "login":
+        n, p = g("name", ""), g("pw", "")
+        if n == AU and p == AP:
+            t = uuid.uuid4().hex; ADM.add(t); return {"t": t, "admin": 1}
+        r = row("select * from users where name=? and pw=?", (n, Hs(p)))
+        if not r: return {"err": "اسم المستخدم أو كلمة السر خاطئة"}
+        if r[0]["frozen"]: return {"err": "هذا الحساب مجمّد"}
+        t = uuid.uuid4().hex; run("insert into sess values(?,?)", (t, r[0]["id"])); run("update users set last=?,seen=? where id=?", (now, now, r[0]["id"]))
+        return {"t": t, "me": {"id": r[0]["id"], "name": n, "av": r[0]["av"]}}
+    u = auth(g("t"))
+    if u is None: return {"err": "auth"}
+    if u == -1:
+        if a == "me": return {"admin": 1}
+        if a == "adm":
+            us = row("select id,name,created,last,seen,frozen from users order by id desc")
+            return {"users": us, "total": len(us), "online": sum(1 for x in us if x["seen"] > now - 60 and not x["frozen"])}
+        if a == "freeze": run("update users set frozen=? where id=?", (g("v", 1), g("id"))); return {}
+        if a == "deluser": wipe(g("id")); return {}
+        return {"err": "?"}
+    BL = "(select b from blocks where a=%d union select a from blocks where b=%d)" % (u, u)
+    if a == "me": return {"me": row("select id,name,av from users where id=?", (u,))[0]}
+    if a == "feed":
+        ids = "(select b from follows where a=%d union select %d)" % (u, u)
+        return {"posts": P(u, "p.kind='post' and p.u in %s and p.u not in %s" % (ids, BL)), "stories": P(u, "p.kind='story' and p.ts>%f and p.u in %s and p.u not in %s" % (now - 86400, ids, BL), 100)}
+    if a == "reels": return {"posts": P(u, "p.kind='reel' and p.u not in " + BL)}
+    if a == "new":
+        k, m = g("kind"), save(g("media"))
+        if k not in ("post", "story", "reel") or (k != "post" and not m) or (not m and not g("txt", "").strip()): return {"err": "أضف ملفاً أو نصاً"}
+        run("insert into posts(u,kind,media,mt,txt,ts) values(?,?,?,?,?,?)", (u, k, m, MT(m), g("txt", "")[:2000], now)); return {}
+    if a == "editpost": run("update posts set txt=? where id=? and u=?", (g("txt", "")[:2000], g("id"), u)); return {}
+    if a == "delpost": run("delete from posts where id=? and u=?", (g("id"), u)); run("delete from comments where p=?", (g("id"),)); return {}
+    if a == "like":
+        p = g("p")
+        if row("select 1 from likes where p=? and u=?", (p, u)): run("delete from likes where p=? and u=?", (p, u))
+        else:
+            run("insert into likes values(?,?)", (p, u)); o = row("select u from posts where id=?", (p,))
+            if o: N(o[0]["u"], "أعجب بمنشورك: " + row("select name from users where id=?", (u,))[0]["name"], u)
+        return {"likes": row("select count(*) c from likes where p=?", (p,))[0]["c"], "liked": bool(row("select 1 from likes where p=? and u=?", (p, u)))}
+    if a == "cmts":
+        p = g("p")
+        return {"c": row("select c.*,us.name,us.av from comments c join users us on us.id=c.u where c.p=?1 and (c.u=?2 or ?2=(select u from posts where id=?1) or c.u not in (select b from restr where a=(select u from posts where id=?1))) order by c.id", (p, u))}
+    if a == "comment":
+        t = g("txt", "").strip()[:500]
+        if t:
+            run("insert into comments(p,u,txt,ts) values(?,?,?,?)", (g("p"), u, t, now)); o = row("select u from posts where id=?", (g("p"),))
+            if o: N(o[0]["u"], "علّق على منشورك: " + row("select name from users where id=?", (u,))[0]["name"], u)
+        return {}
+    if a == "delcmt": run("delete from comments where id=? and u=?", (g("id"), u)); return {}
+    if a == "search":
+        return {"us": row("select id,name,av,(select count(*) from follows where a=? and b=users.id) isf from users where name like ? and frozen=0 and id!=? and id not in " + BL + " limit 30", (u, "%" + g("q", "") + "%", u))}
+    if a == "follow":
+        i = g("id")
+        if row("select 1 from follows where a=? and b=?", (u, i)): run("delete from follows where a=? and b=?", (u, i))
+        else: run("insert into follows values(?,?)", (u, i)); N(i, "بدأ بمتابعتك: " + row("select name from users where id=?", (u,))[0]["name"], u)
+        return {}
+    if a in ("block", "restrict"):
+        t = "blocks" if a == "block" else "restr"; i = g("id")
+        if row("select 1 from %s where a=? and b=?" % t, (u, i)): run("delete from %s where a=? and b=?" % t, (u, i))
+        else:
+            run("insert into %s values(?,?)" % t, (u, i))
+            if a == "block": run("delete from follows where (a=? and b=?) or (a=? and b=?)", (u, i, i, u))
+        return {}
+    if a == "lists":
+        return {"bl": row("select id,name,av from users where id in (select b from blocks where a=?)", (u,)), "rs": row("select id,name,av from users where id in (select b from restr where a=?)", (u,))}
+    if a == "profile":
+        i = g("id", u); r = row("select id,name,bio,av from users where id=? and frozen=0", (i,))
+        if not r or row("select 1 from blocks where a=? and b=?", (i, u)): return {"err": "الحساب غير موجود"}
+        return {"u": r[0], "fers": row("select count(*) c from follows where b=?", (i,))[0]["c"], "fing": row("select count(*) c from follows where a=?", (i,))[0]["c"],
+                "isf": bool(row("select 1 from follows where a=? and b=?", (u, i))), "isb": bool(row("select 1 from blocks where a=? and b=?", (u, i))), "isr": bool(row("select 1 from restr where a=? and b=?", (u, i))),
+                "posts": P(u, "p.u=%d and p.kind in ('post','reel')" % int(i))}
+    if a == "editprofile":
+        n = g("name", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.]{3,20}", n) or n == AU: return {"err": "اسم مستخدم غير صالح"}
+        av = save(g("av")) or row("select av from users where id=?", (u,))[0]["av"]
+        try: run("update users set name=?,bio=?,av=? where id=?", (n, g("bio", "")[:300], av, u))
+        except sqlite3.IntegrityError: return {"err": "اسم المستخدم مستخدم"}
+        return {"me": row("select id,name,av from users where id=?", (u,))[0]}
+    if a == "chats":
+        cd = {r["o"]: r["ts"] for r in row("select o,ts from chatdel where u=?", (u,))}; out = {}
+        for m in row("select * from msgs where f=? or t=? order by id", (u, u)):
+            o = m["t"] if m["f"] == u else m["f"]
+            if m["ts"] > cd.get(o, 0): out[o] = m
+        res = []
+        for o, m in sorted(out.items(), key=lambda x: -x[1]["id"]):
+            x = row("select id,name,av from users where id=? and frozen=0", (o,))
+            if x: res.append({**x[0], "last": m["txt"] or ("📎 صورة" if m["mt"] == "i" else "📎 فيديو"), "ts": m["ts"]})
+        return {"chats": res}
+    if a == "msgs":
+        o = g("o"); cd = row("select ts from chatdel where u=? and o=?", (u, o))
+        return {"m": row("select * from msgs where ((f=?1 and t=?2) or (f=?2 and t=?1)) and ts>?3 order by id", (u, o, cd[0]["ts"] if cd else 0))}
+    if a == "send":
+        o = g("o")
+        if row("select 1 from blocks where (a=? and b=?) or (a=? and b=?)", (u, o, o, u)): return {"err": "لا يمكن إرسال رسالة لهذا المستخدم"}
+        m = save(g("media")); t = g("txt", "").strip()[:2000]
+        if m or t: run("insert into msgs(f,t,txt,media,mt,ts) values(?,?,?,?,?,?)", (u, o, t, m, MT(m), now))
+        return {}
+    if a == "editmsg": run("update msgs set txt=?,edited=1 where id=? and f=?", (g("txt", "")[:2000], g("id"), u)); return {}
+    if a == "delmsg": run("delete from msgs where id=? and f=?", (g("id"), u)); return {}
+    if a == "delchat": run("insert or replace into chatdel values(?,?,?)", (u, g("o"), now)); return {}
+    if a == "notifs": return {"n": row("select * from notifs where u=? order by id desc limit 50", (u,))}
+    return {"err": "?"}
 
+class Hd(http.server.BaseHTTPRequestHandler):
+    def log_message(s, *a): pass
+    def do_GET(s):
+        p = s.path.split("?")[0]
+        f = os.path.join(D, "index.html") if p == "/" else os.path.join(U, os.path.basename(p)) if p.startswith("/uploads/") else None
+        if not f or not os.path.isfile(f): s.send_error(404); return
+        b = open(f, "rb").read(); ct = mimetypes.guess_type(f)[0] or "text/html"; st = 200; hd = {}
+        if ct == "text/html": ct += "; charset=utf-8"
+        m = re.match(r"bytes=(\d*)-(\d*)", s.headers.get("Range", ""))
+        if m and p != "/":
+            a0 = int(m.group(1) or 0); a1 = int(m.group(2)) if m.group(2) else len(b) - 1
+            hd["Content-Range"] = "bytes %d-%d/%d" % (a0, a1, len(b)); b = b[a0:a1 + 1]; st = 206
+        s.send_response(st); s.send_header("Content-Type", ct); s.send_header("Content-Length", len(b)); s.send_header("Accept-Ranges", "bytes")
+        for k, v in hd.items(): s.send_header(k, v)
+        s.end_headers(); s.wfile.write(b)
+    def do_POST(s):
+        try:
+            n = int(s.headers.get("Content-Length", 0))
+            if n > 80_000_000: raise ValueError
+            d = json.loads(s.rfile.read(n)); r = act(d.get("a"), d)
+        except Exception as e: r = {"err": "خطأ في الطلب"}
+        b = json.dumps(r).encode(); s.send_response(200); s.send_header("Content-Type", "application/json"); s.send_header("Content-Length", len(b)); s.end_headers(); s.wfile.write(b)
 
-def db():
-    if 'd' not in g:
-        g.d = sqlite3.connect(DB); g.d.row_factory = sqlite3.Row
-    return g.d
-
-@app.teardown_appcontext
-def close(e):
-    d = g.pop('d', None)
-    if d: d.close()
-
-def q(s, a=(), one=False):
-    r = db().execute(s, a).fetchall()
-    return (r[0] if r else None) if one else r
-
-def ex(s, a=()):
-    c = db().execute(s, a); db().commit(); return c.lastrowid
-
-def auth(f):
-    @wraps(f)
-    def w(*a, **k):
-        r = q('select uid from sessions where token=?', (request.headers.get('X-Token', ''),), True)
-        if not r: return jsonify(error='سجّل الدخول أولاً'), 401
-        g.uid = r['uid']
-        return f(*a, **k)
-    return w
-
-def err(m, c=400): return jsonify(error=m), c
-def U(i):
-    r = q('select id,username,avatar from users where id=?', (i,), True)
-    return dict(r) if r else None
-def fo(a, b): return bool(q('select 1 from follows where a=? and b=?', (a, b), True))
-def mutual(a, b): return fo(a, b) and fo(b, a)
-def blk(a, b): return bool(q('select 1 from blocks where (a=? and b=?) or (a=? and b=?)', (a, b, b, a), True))
-def clr(o):
-    c = q('select mid from chatclr where uid=? and o=?', (g.uid, o), True)
-    return c['mid'] if c else 0
-def mk(i):
-    t = secrets.token_hex(24); ex('insert into sessions values(?,?)', (t, i)); return t
-
-def save(f):
-    if not f or not f.filename: return None, None
-    ext = os.path.splitext(secure_filename(f.filename))[1].lower() or '.bin'
-    n = secrets.token_hex(8) + ext
-    f.save(os.path.join(UP, n))
-    m = (f.mimetype or '').split('/')[0]
-    return '/uploads/' + n, (m if m in ('image', 'video', 'audio') else 'file')
-
-
-@app.get('/')
-def index(): return send_from_directory(B, 'index.html')
-
-@app.get('/uploads/<path:n>')
-def uploads(n): return send_from_directory(UP, n)
-
-@app.post('/api/register')
-def register():
-    f = request.form
-    e, n, p = f.get('email', '').strip().lower(), f.get('username', '').strip(), f.get('password', '')
-    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', e): return err('الإيميل غير صحيح')
-    if not re.match(r'^[\w\u0600-\u06FF.]{3,20}$', n): return err('اسم المستخدم من 3 إلى 20 حرف بدون مسافات')
-    if len(p) < 6: return err('كلمة المرور 6 أحرف على الأقل')
-    if q('select 1 from users where email=? or username=?', (e, n), True): return err('الإيميل أو اسم المستخدم مستخدم من قبل')
-    a, t = save(request.files.get('avatar'))
-    if a and t != 'image': return err('صورة الحساب لازم تكون صورة')
-    i = ex('insert into users(email,username,pw,avatar) values(?,?,?,?)', (e, n, generate_password_hash(p), a))
-    return jsonify(token=mk(i))
-
-@app.post('/api/login')
-def login():
-    d = request.get_json(silent=True) or {}
-    x = d.get('user', '').strip().lower()
-    r = q('select * from users where lower(username)=? or email=?', (x, x), True)
-    if not r or not check_password_hash(r['pw'], d.get('password', '')): return err('بيانات الدخول غير صحيحة', 401)
-    return jsonify(token=mk(r['id']))
-
-@app.get('/api/me')
-@auth
-def me(): return jsonify(U(g.uid))
-
-@app.get('/api/uid/<int:i>')
-@auth
-def uid(i):
-    u = U(i)
-    if not u: return err('غير موجود', 404)
-    u['blocked'] = bool(q('select 1 from blocks where a=? and b=?', (g.uid, i), True))
-    return jsonify(u)
-
-@app.get('/api/user/<name>')
-@auth
-def user(name):
-    r = q('select id from users where username=?', (name,), True)
-    if not r: return err('المستخدم غير موجود', 404)
-    i = r['id']; u = U(i)
-    c = lambda s: q(s, (i,), True)['c']
-    u['bio'] = q('select bio from users where id=?', (i,), True)['bio'] or ''
-    u.update(posts=c('select count(*) c from posts where uid=?'), followers=c('select count(*) c from follows where b=?'),
-             following=c('select count(*) c from follows where a=?'), i_follow=fo(g.uid, i), mutual=mutual(g.uid, i))
-    return jsonify(u)
-
-@app.get('/api/search')
-@auth
-def search():
-    s = request.args.get('q', '').strip().replace('%', '').replace('_', '')
-    if not s: return jsonify([])
-    r = q("select id from users where username like ? and id!=? order by (username like ?) desc, username limit 30",
-          ('%' + s + '%', g.uid, s + '%'))
-    out = []
-    for x in r:
-        u = U(x['id']); u['i_follow'] = fo(g.uid, x['id']); out.append(u)
-    return jsonify(out)
-
-def P(r):
-    c = lambda s: q(s, (r['id'],), True)['c']
-    return dict(id=r['id'], text=r['text'], media=r['media'], mtype=r['mtype'], ts=r['ts'], user=U(r['uid']),
-                likes=c('select count(*) c from likes where pid=?'), comments=c('select count(*) c from comments where pid=?'),
-                liked=bool(q('select 1 from likes where pid=? and uid=?', (r['id'], g.uid), True)),
-                saved=bool(q('select 1 from saves where pid=? and uid=?', (r['id'], g.uid), True)))
-
-@app.get('/api/feed')
-@auth
-def feed():
-    w, a = [], []
-    if request.args.get('type') == 'video': w.append("mtype='video'")
-    if request.args.get('tag'): w.append('text like ?'); a.append('%#' + request.args['tag'] + '%')
-    if request.args.get('user'): w.append('uid=?'); a.append(request.args['user'])
-    s = 'select * from posts' + (' where ' + ' and '.join(w) if w else '') + ' order by id desc limit 60'
-    return jsonify([P(r) for r in q(s, a)])
-
-@app.post('/api/posts')
-@auth
-def post():
-    t = request.form.get('text', '').strip(); m, mt = save(request.files.get('file'))
-    if not t and not m: return err('اكتب شيئاً أو أضف صورة/فيديو')
-    if m and mt not in ('image', 'video'): return err('الملف لازم يكون صورة أو فيديو')
-    ex('insert into posts(uid,text,media,mtype) values(?,?,?,?)', (g.uid, t, m, mt))
-    return jsonify(ok=1)
-
-@app.post('/api/like/<int:p>')
-@auth
-def like(p):
-    if q('select 1 from likes where pid=? and uid=?', (p, g.uid), True):
-        ex('delete from likes where pid=? and uid=?', (p, g.uid)); on = False
-    else:
-        ex('insert into likes values(?,?)', (p, g.uid)); on = True
-    return jsonify(on=on, n=q('select count(*) c from likes where pid=?', (p,), True)['c'])
-
-@app.route('/api/comments/<int:p>', methods=['GET', 'POST'])
-@auth
-def comments(p):
-    if request.method == 'POST':
-        t = (request.get_json(silent=True) or {}).get('text', '').strip()
-        if t: ex('insert into comments(pid,uid,text) values(?,?,?)', (p, g.uid, t[:500]))
-        return jsonify(ok=1)
-    return jsonify([dict(text=r['text'], ts=r['ts'], user=U(r['uid'])) for r in q('select * from comments where pid=? order by id', (p,))])
-
-@app.post('/api/follow/<int:i>')
-@auth
-def follow(i):
-    if i == g.uid: return err('لا يمكنك متابعة نفسك')
-    if fo(g.uid, i):
-        ex('delete from follows where a=? and b=?', (g.uid, i)); on = False
-    else:
-        ex('insert into follows values(?,?)', (g.uid, i)); on = True
-        ex('insert into notifs(uid,kind,frm) values(?,?,?)', (i, 'accept' if fo(i, g.uid) else 'follow', g.uid))
-    return jsonify(on=on)
-
-@app.get('/api/notifs')
-@auth
-def notifs():
-    r = q('select * from notifs where uid=? order by id desc limit 50', (g.uid,))
-    out = [dict(kind=x['kind'], ts=x['ts'], user=U(x['frm'])) for x in r]
-    ex('update notifs set seen=1 where uid=?', (g.uid,))
-    return jsonify(out)
-
-@app.get('/api/badges')
-@auth
-def badges():
-    return jsonify(n=q('select count(*) c from notifs where uid=? and seen=0', (g.uid,), True)['c'],
-                   m=q('select count(*) c from msgs where b=? and seen=0', (g.uid,), True)['c'])
-
-@app.get('/api/chats')
-@auth
-def chats():
-    out = []
-    for x in q('select b from follows f where a=? and exists(select 1 from follows where a=f.b and b=?)', (g.uid, g.uid)):
-        o = x['b']
-        if blk(g.uid, o): continue
-        l = q('select * from msgs where id>? and ((a=? and b=?) or (a=? and b=?)) order by id desc limit 1', (clr(o), g.uid, o, o, g.uid), True)
-        un = q('select count(*) c from msgs where a=? and b=? and seen=0', (o, g.uid), True)['c']
-        last = ''
-        if l: last = '🚫 رسالة محذوفة' if l['deleted'] else (l['text'] or '📎 وسائط')
-        out.append(dict(user=U(o), last=last, unread=un, id=l['id'] if l else 0))
-    out.sort(key=lambda d: -d['id'])
-    return jsonify(out)
-
-@app.get('/api/msg/<int:o>')
-@auth
-def msgs(o):
-    ex('update msgs set seen=1 where a=? and b=?', (o, g.uid))
-    r = q('select * from msgs where id>? and ((a=? and b=?) or (a=? and b=?)) order by id', (clr(o), g.uid, o, o, g.uid))
-    return jsonify([dict(id=x['id'], me=x['a'] == g.uid, text=x['text'], media=x['media'], mtype=x['mtype'],
-                         edited=x['edited'], deleted=x['deleted'], seen=x['seen'], ts=x['ts']) for x in r])
-
-@app.post('/api/msg/<int:o>')
-@auth
-def send(o):
-    if not mutual(g.uid, o) or blk(g.uid, o): return err('لا يمكن إرسال رسائل لهذا المستخدم', 403)
-    m, t = save(request.files.get('file')); tx = request.form.get('text', '').strip()
-    if not tx and not m: return err('الرسالة فارغة')
-    ex('insert into msgs(a,b,text,media,mtype) values(?,?,?,?,?)', (g.uid, o, tx, m, t))
-    return jsonify(ok=1)
-
-@app.post('/api/msg/edit/<int:i>')
-@auth
-def medit(i):
-    t = (request.get_json(silent=True) or {}).get('text', '').strip()
-    if t: ex('update msgs set text=?,edited=1 where id=? and a=? and deleted=0', (t, i, g.uid))
-    return jsonify(ok=1)
-
-@app.post('/api/msg/del/<int:i>')
-@auth
-def mdel(i):
-    ex("update msgs set deleted=1,text='',media=NULL,mtype=NULL where id=? and a=?", (i, g.uid))
-    return jsonify(ok=1)
-
-@app.post('/api/chat/<int:o>/clear')
-@auth
-def clear(o):
-    m = q('select coalesce(max(id),0) m from msgs where (a=? and b=?) or (a=? and b=?)', (g.uid, o, o, g.uid), True)['m']
-    ex('insert or replace into chatclr values(?,?,?)', (g.uid, o, m))
-    return jsonify(ok=1)
-
-@app.post('/api/block/<int:o>')
-@auth
-def block(o):
-    if q('select 1 from blocks where a=? and b=?', (g.uid, o), True):
-        ex('delete from blocks where a=? and b=?', (g.uid, o)); on = False
-    else:
-        ex('insert into blocks values(?,?)', (g.uid, o)); on = True
-    return jsonify(on=on)
-
-
-@app.post('/api/stories')
-@auth
-def story_add():
-    m, t = save(request.files.get('file'))
-    if t not in ('image', 'video'): return err('اختر صورة أو فيديو')
-    ex('insert into stories(uid,media,mtype) values(?,?,?)', (g.uid, m, t)); return jsonify(ok=1)
-
-@app.get('/api/stories')
-@auth
-def stories():
-    r = q("select * from stories where ts>cast(strftime('%s','now') as integer)-86400 and (uid=? or uid in (select b from follows where a=?)) order by id", (g.uid, g.uid))
-    d = {}
-    for x in r: d.setdefault(x['uid'], []).append(dict(media=x['media'], mtype=x['mtype'], ts=x['ts']))
-    out = [dict(user=U(k), items=v) for k, v in d.items()]
-    out.sort(key=lambda s: s['user']['id'] != g.uid)
-    return jsonify(out)
-
-@app.post('/api/save/<int:p>')
-@auth
-def save_post(p):
-    if q('select 1 from saves where pid=? and uid=?', (p, g.uid), True):
-        ex('delete from saves where pid=? and uid=?', (p, g.uid)); on = False
-    else:
-        ex('insert into saves values(?,?)', (p, g.uid)); on = True
-    return jsonify(on=on)
-
-@app.get('/api/saved')
-@auth
-def saved():
-    return jsonify([P(r) for r in q('select p.* from posts p join saves s on s.pid=p.id where s.uid=? order by s.rowid desc', (g.uid,))])
-
-@app.get('/api/post/<int:p>')
-@auth
-def post_get(p):
-    r = q('select * from posts where id=?', (p,), True)
-    return jsonify(P(r)) if r else err('المنشور غير موجود', 404)
-
-@app.post('/api/post/del/<int:p>')
-@auth
-def post_del(p):
-    if q('select 1 from posts where id=? and uid=?', (p, g.uid), True):
-        for t in ('posts where id', 'likes where pid', 'comments where pid', 'saves where pid'): ex(f'delete from {t}=?', (p,))
-    return jsonify(ok=1)
-
-@app.post('/api/post/edit/<int:p>')
-@auth
-def post_edit(p):
-    ex('update posts set text=? where id=? and uid=?', ((request.get_json(silent=True) or {}).get('text', '').strip(), p, g.uid))
-    return jsonify(ok=1)
-
-@app.post('/api/profile')
-@auth
-def profile_upd():
-    ex('update users set bio=? where id=?', (request.form.get('bio', '').strip()[:150], g.uid))
-    a, t = save(request.files.get('avatar'))
-    if a and t == 'image': ex('update users set avatar=? where id=?', (a, g.uid))
-    return jsonify(ok=1)
-
-@app.get('/api/explore')
-@auth
-def explore():
-    r = q("select * from posts where media is not null order by (select count(*) from likes where pid=posts.id) desc, id desc limit 60")
-    return jsonify([dict(id=x['id'], media=x['media'], mtype=x['mtype'], text=x['text']) for x in r])
-
-@app.get('/api/follows/<int:i>/<kind>')
-@auth
-def flist(i, kind):
-    s = 'select a x from follows where b=?' if kind == 'followers' else 'select b x from follows where a=?'
-    return jsonify([dict(U(r['x']), i_follow=fo(g.uid, r['x'])) for r in q(s, (i,))])
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+if __name__ == "__main__":
+    print("Mi running on port", PORT)
+    http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Hd).serve_forever()
