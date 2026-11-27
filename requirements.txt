@@ -1,2 +1,2 @@
-flask
-gunicorn
+# Mi uses only the Python standard library (Python 3.7 or newer).
+# No packages to install.
