@@ -19,7 +19,15 @@ create table if not exists blocks(a int,b int,primary key(a,b));
 create table if not exists restr(a int,b int,primary key(a,b));
 create table if not exists chatdel(u int,o int,ts real,primary key(u,o));
 create table if not exists notifs(id integer primary key,u int,txt text,ts real);
-create table if not exists sess(tok text primary key,u int);""")
+create table if not exists sess(tok text primary key,u int);
+create table if not exists freq(a int,b int,primary key(a,b));
+create table if not exists sviews(p int,u int,ts real,primary key(p,u));""")
+for _s in ["alter table users add column dn text default ''", "alter table users add column priv int default 0", "alter table msgs add column seen int default 0",
+           "alter table msgs add column del int default 0", "alter table notifs add column seen int default 0", "alter table notifs add column k text default ''",
+           "alter table notifs add column x int default 0", "alter table comments add column r int default 0"]:
+    try: db.execute(_s)
+    except sqlite3.OperationalError: pass
+db.commit()
 
 def row(s, a=()):
     with L: return [dict(r) for r in db.execute(s, a).fetchall()]
@@ -35,10 +43,10 @@ def save(d):
     n = uuid.uuid4().hex + "." + e
     open(os.path.join(U, n), "wb").write(base64.b64decode(b)); return "/uploads/" + n
 def MT(m): return "v" if m.endswith((".mp4", ".webm", ".mov")) else ("i" if m else "")
-def N(u, t, me):
-    if u != me: run("insert into notifs(u,txt,ts) values(?,?,?)", (u, t, time.time()))
+def N(u, t, me, k="", x=0):
+    if u != me: run("insert into notifs(u,txt,ts,k,x) values(?,?,?,?,?)", (u, t, time.time(), k, x))
 def P(me, where, lim=60):
-    return row("select p.*,u.name,u.av,(select count(*) from likes where p=p.id) likes,(select count(*) from likes where p=p.id and u=?) liked,(select count(*) from comments where p=p.id) cc from posts p join users u on u.id=p.u where u.frozen=0 and " + where + " order by p.id desc limit ?", (me, lim))
+    return row("select p.*,u.name,u.av,(select count(*) from likes where p=p.id) likes,(select count(*) from likes where p=p.id and u=?) liked,(select count(*) from comments where p=p.id) cc,(select count(*) from sviews where p=p.id) vc from posts p join users u on u.id=p.u where u.frozen=0 and " + where + " order by p.id desc limit ?", (me, lim))
 def wipe(i):
     for s in ["delete from posts where u=?1", "delete from likes where u=?1", "delete from comments where u=?1", "delete from follows where a=?1 or b=?1", "delete from msgs where f=?1 or t=?1", "delete from blocks where a=?1 or b=?1", "delete from restr where a=?1 or b=?1", "delete from sess where u=?1", "delete from notifs where u=?1", "delete from users where id=?1"]:
         run(s, (i,))
@@ -50,13 +58,16 @@ def auth(t):
     if not x or x[0]["frozen"]: return None
     run("update users set seen=? where id=?", (time.time(), r[0]["u"])); return r[0]["u"]
 
+if not row("select 1 from users where name='Mi'"): run("insert into users(name,pw,dn,created) values('Mi',?,'Mi',?)", (uuid.uuid4().hex, time.time()))
+MI = row("select id from users where name='Mi'")[0]["id"]
+
 def act(a, d):
     now = time.time(); g = d.get
     if a == "reg":
         n, p = g("name", "").strip(), g("pw", "")
         if not re.fullmatch(r"[A-Za-z0-9_.]{3,20}", n) or len(p) < 4: return {"err": "اسم المستخدم 3-20 حرف انجليزي أو أرقام، وكلمة السر 4 أحرف على الأقل"}
-        if n == AU: return {"err": "الاسم غير متاح"}
-        try: run("insert into users(name,pw,created,last) values(?,?,?,?)", (n, Hs(p), now, now))
+        if n == AU or n.lower() == "mi": return {"err": "الاسم غير متاح"}
+        try: run("insert into users(name,pw,dn,av,created,last) values(?,?,?,?,?,?)", (n, Hs(p), g("dn", "").strip()[:40], save(g("av")), now, now))
         except sqlite3.IntegrityError: return {"err": "اسم المستخدم مستخدم"}
         a = "login"
     if a == "login":
@@ -73,16 +84,23 @@ def act(a, d):
     if u == -1:
         if a == "me": return {"admin": 1}
         if a == "adm":
-            us = row("select id,name,created,last,seen,frozen from users order by id desc")
+            us = row("select id,name,created,last,seen,frozen from users where name!='Mi' order by id desc")
             return {"users": us, "total": len(us), "online": sum(1 for x in us if x["seen"] > now - 60 and not x["frozen"])}
         if a == "freeze": run("update users set frozen=? where id=?", (g("v", 1), g("id"))); return {}
         if a == "deluser": wipe(g("id")); return {}
+        if a == "bcast":
+            for r_ in row("select id from users where frozen=0 and name!='Mi'"): run("insert into notifs(u,txt,ts,k) values(?,?,?,?)", (r_["id"], "📢 Mi: " + g("txt", "")[:500], now, "b"))
+            return {}
+        if a == "amsg": run("insert into msgs(f,t,txt,ts) values(?,?,?,?)", (MI, g("id"), g("txt", "")[:2000], now)); return {}
+        if a == "aconv":
+            run("update msgs set seen=1 where t=?", (MI,))
+            return {"m": row("select * from msgs where (f=?1 and t=?2) or (f=?2 and t=?1) order by id", (MI, g("id")))}
         return {"err": "?"}
     BL = "(select b from blocks where a=%d union select a from blocks where b=%d)" % (u, u)
     if a == "me": return {"me": row("select id,name,av from users where id=?", (u,))[0]}
     if a == "feed":
         ids = "(select b from follows where a=%d union select %d)" % (u, u)
-        return {"posts": P(u, "p.kind='post' and p.u in %s and p.u not in %s" % (ids, BL)), "stories": P(u, "p.kind='story' and p.ts>%f and p.u in %s and p.u not in %s" % (now - 86400, ids, BL), 100)}
+        return {"posts": P(u, "p.kind='post' and p.u in %s and p.u not in %s" % (ids, BL)), "stories": P(u, "p.kind='story' and p.ts>%f and (p.u in %s or u.priv=0) and p.u not in %s" % (now - 86400, ids, BL), 100)}
     if a == "reels": return {"posts": P(u, "p.kind='reel' and p.u not in " + BL)}
     if a == "new":
         k, m = g("kind"), save(g("media"))
@@ -99,20 +117,23 @@ def act(a, d):
         return {"likes": row("select count(*) c from likes where p=?", (p,))[0]["c"], "liked": bool(row("select 1 from likes where p=? and u=?", (p, u)))}
     if a == "cmts":
         p = g("p")
-        return {"c": row("select c.*,us.name,us.av from comments c join users us on us.id=c.u where c.p=?1 and (c.u=?2 or ?2=(select u from posts where id=?1) or c.u not in (select b from restr where a=(select u from posts where id=?1))) order by c.id", (p, u))}
+        return {"c": row("select c.*,us.name,us.av from comments c join users us on us.id=c.u where c.p=?1 and (c.u=?2 or ?2=(select u from posts where id=?1) or c.u not in (select b from restr where a=(select u from posts where id=?1))) order by case when c.r>0 then c.r else c.id end,c.id", (p, u))}
     if a == "comment":
         t = g("txt", "").strip()[:500]
         if t:
-            run("insert into comments(p,u,txt,ts) values(?,?,?,?)", (g("p"), u, t, now)); o = row("select u from posts where id=?", (g("p"),))
+            run("insert into comments(p,u,txt,ts,r) values(?,?,?,?,?)", (g("p"), u, t, now, int(g("r", 0) or 0))); o = row("select u from posts where id=?", (g("p"),))
             if o: N(o[0]["u"], "علّق على منشورك: " + row("select name from users where id=?", (u,))[0]["name"], u)
         return {}
     if a == "delcmt": run("delete from comments where id=? and u=?", (g("id"), u)); return {}
     if a == "search":
-        return {"us": row("select id,name,av,(select count(*) from follows where a=? and b=users.id) isf from users where name like ? and frozen=0 and id!=? and id not in " + BL + " limit 30", (u, "%" + g("q", "") + "%", u))}
+        return {"us": row("select id,name,av,(select count(*) from follows where a=? and b=users.id) isf from users where name like ? and name!='Mi' and frozen=0 and id!=? and id not in " + BL + " limit 30", (u, "%" + g("q", "") + "%", u))}
     if a == "follow":
         i = g("id")
+        nm = row("select name from users where id=?", (u,))[0]["name"]
         if row("select 1 from follows where a=? and b=?", (u, i)): run("delete from follows where a=? and b=?", (u, i))
-        else: run("insert into follows values(?,?)", (u, i)); N(i, "بدأ بمتابعتك: " + row("select name from users where id=?", (u,))[0]["name"], u)
+        elif row("select 1 from freq where a=? and b=?", (u, i)): run("delete from freq where a=? and b=?", (u, i))
+        elif row("select priv from users where id=?", (i,))[0]["priv"]: run("insert into freq values(?,?)", (u, i)); N(i, "طلب متابعتك: " + nm, u, "req", u)
+        else: run("insert into follows values(?,?)", (u, i)); N(i, "بدأ بمتابعتك: " + nm, u)
         return {}
     if a in ("block", "restrict"):
         t = "blocks" if a == "block" else "restr"; i = g("id")
@@ -124,18 +145,27 @@ def act(a, d):
     if a == "lists":
         return {"bl": row("select id,name,av from users where id in (select b from blocks where a=?)", (u,)), "rs": row("select id,name,av from users where id in (select b from restr where a=?)", (u,))}
     if a == "profile":
-        i = g("id", u); r = row("select id,name,bio,av from users where id=? and frozen=0", (i,))
+        i = g("id", u); r = row("select id,name,dn,priv,seen,bio,av from users where id=? and frozen=0", (i,))
         if not r or row("select 1 from blocks where a=? and b=?", (i, u)): return {"err": "الحساب غير موجود"}
         return {"u": r[0], "fers": row("select count(*) c from follows where b=?", (i,))[0]["c"], "fing": row("select count(*) c from follows where a=?", (i,))[0]["c"],
                 "isf": bool(row("select 1 from follows where a=? and b=?", (u, i))), "isb": bool(row("select 1 from blocks where a=? and b=?", (u, i))), "isr": bool(row("select 1 from restr where a=? and b=?", (u, i))),
-                "posts": P(u, "p.u=%d and p.kind in ('post','reel')" % int(i))}
+                "isq": bool(row("select 1 from freq where a=? and b=?", (u, i))),
+                "lock": bool(r[0]["priv"] and int(i) != u and not row("select 1 from follows where a=? and b=?", (u, i))),
+                "posts": [] if (r[0]["priv"] and int(i) != u and not row("select 1 from follows where a=? and b=?", (u, i))) else P(u, "p.u=%d and p.kind in ('post','reel')" % int(i))}
     if a == "editprofile":
         n = g("name", "").strip()
         if not re.fullmatch(r"[A-Za-z0-9_.]{3,20}", n) or n == AU: return {"err": "اسم مستخدم غير صالح"}
         av = save(g("av")) or row("select av from users where id=?", (u,))[0]["av"]
-        try: run("update users set name=?,bio=?,av=? where id=?", (n, g("bio", "")[:300], av, u))
+        try: run("update users set name=?,bio=?,av=?,dn=?,priv=? where id=?", (n, g("bio", "")[:300], av, g("dn", "")[:40], 1 if g("priv") else 0, u))
         except sqlite3.IntegrityError: return {"err": "اسم المستخدم مستخدم"}
         return {"me": row("select id,name,av from users where id=?", (u,))[0]}
+    if a in ("accept", "decline"):
+        i = g("id")
+        if a == "accept": run("insert or ignore into follows values(?,?)", (i, u))
+        run("delete from freq where a=? and b=?", (i, u)); run("delete from notifs where u=? and k='req' and x=?", (u, i)); return {}
+    if a == "badge": return {"m": row("select count(*) c from msgs where t=? and seen=0 and del=0", (u,))[0]["c"], "n": row("select count(*) c from notifs where u=? and seen=0", (u,))[0]["c"]}
+    if a == "sview": run("insert or ignore into sviews values(?,?,?)", (g("p"), u, now)); return {}
+    if a == "sviewers": return {"v": row("select us.id,us.name,us.av from sviews s join users us on us.id=s.u where s.p=? and (select u from posts where id=?)=? order by s.ts desc", (g("p"), g("p"), u))}
     if a == "chats":
         cd = {r["o"]: r["ts"] for r in row("select o,ts from chatdel where u=?", (u,))}; out = {}
         for m in row("select * from msgs where f=? or t=? order by id", (u, u)):
@@ -143,22 +173,27 @@ def act(a, d):
             if m["ts"] > cd.get(o, 0): out[o] = m
         res = []
         for o, m in sorted(out.items(), key=lambda x: -x[1]["id"]):
-            x = row("select id,name,av from users where id=? and frozen=0", (o,))
-            if x: res.append({**x[0], "last": m["txt"] or ("📎 صورة" if m["mt"] == "i" else "📎 فيديو"), "ts": m["ts"]})
+            x = row("select id,name,av,seen from users where id=? and frozen=0", (o,))
+            if x: res.append({**x[0], "last": ("🚫 رسالة محذوفة" if m["del"] else (m["txt"] or ("📎 صورة" if m["mt"] == "i" else "📎 فيديو"))), "ts": m["ts"]})
         return {"chats": res}
     if a == "msgs":
-        o = g("o"); cd = row("select ts from chatdel where u=? and o=?", (u, o))
-        return {"m": row("select * from msgs where ((f=?1 and t=?2) or (f=?2 and t=?1)) and ts>?3 order by id", (u, o, cd[0]["ts"] if cd else 0))}
+        o = g("o"); cd = row("select ts from chatdel where u=? and o=?", (u, o)); run("update msgs set seen=1 where f=? and t=?", (o, u))
+        return {"s": row("select seen from users where id=?", (o,))[0]["seen"], "m": row("select * from msgs where ((f=?1 and t=?2) or (f=?2 and t=?1)) and ts>?3 order by id", (u, o, cd[0]["ts"] if cd else 0))}
     if a == "send":
         o = g("o")
         if row("select 1 from blocks where (a=? and b=?) or (a=? and b=?)", (u, o, o, u)): return {"err": "لا يمكن إرسال رسالة لهذا المستخدم"}
+        po = row("select priv from users where id=?", (o,))
+        if po and po[0]["priv"] and u != MI and not row("select 1 from follows where a=? and b=?", (u, o)): return {"err": "هذا حساب خاص، يجب أن يقبل طلب المتابعة أولاً"}
         m = save(g("media")); t = g("txt", "").strip()[:2000]
+        pp = row("select * from posts where id=?", (g("ref"),)) if g("ref") else []
+        if pp: m = pp[0]["media"]; t = ("📤 " + (pp[0]["txt"] or ""))[:2000]
         if m or t: run("insert into msgs(f,t,txt,media,mt,ts) values(?,?,?,?,?,?)", (u, o, t, m, MT(m), now))
         return {}
     if a == "editmsg": run("update msgs set txt=?,edited=1 where id=? and f=?", (g("txt", "")[:2000], g("id"), u)); return {}
-    if a == "delmsg": run("delete from msgs where id=? and f=?", (g("id"), u)); return {}
+    if a == "delmsg": run("update msgs set del=1,txt='',media='',mt='' where id=? and f=?", (g("id"), u)); return {}
     if a == "delchat": run("insert or replace into chatdel values(?,?,?)", (u, g("o"), now)); return {}
-    if a == "notifs": return {"n": row("select * from notifs where u=? order by id desc limit 50", (u,))}
+    if a == "notifs":
+        r_ = row("select * from notifs where u=? order by id desc limit 50", (u,)); run("update notifs set seen=1 where u=?", (u,)); return {"n": r_}
     return {"err": "?"}
 
 class Hd(http.server.BaseHTTPRequestHandler):
@@ -187,3 +222,4 @@ class Hd(http.server.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     print("Mi running on port", PORT)
     http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Hd).serve_forever()
+    
