@@ -1,225 +1,145 @@
-#!/usr/bin/env python3
-# Mi server - no external packages needed. Run: python server.py
-# Env vars: PORT, ADMIN_USER, ADMIN_PASS (defaults 1212 / 5555 - change them on your host!)
-import http.server, json, sqlite3, os, time, base64, uuid, hashlib, re, threading, mimetypes
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mi</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#14111f;--sf:#1f1b2e;--tx:#f4f0e8;--mu:#9a94ad;--ac:#6ee7c8;--ac2:#a78bfa;--rd:#ff6b81}
+*{box-sizing:border-box;margin:0;font-family:Tajawal,system-ui,sans-serif}
+body{background:var(--bg);color:var(--tx);max-width:480px;margin:auto;min-height:100vh;padding-bottom:64px}
+a,button,label{cursor:pointer}input,textarea,button{font:inherit;color:inherit}
+input,textarea{background:var(--sf);border:1px solid #3a3452;border-radius:10px;padding:10px;width:100%;margin:5px 0}
+button{background:var(--ac);color:#14111f;border:0;border-radius:10px;padding:9px 16px;font-weight:700}
+button.g{background:var(--sf);color:var(--tx);border:1px solid #3a3452}button.d{background:var(--rd);color:#fff}
+.logo{font-size:44px;font-weight:800;background:linear-gradient(90deg,var(--ac),var(--ac2));-webkit-background-clip:text;color:transparent}
+#au{padding:60px 24px;text-align:center}#au p{color:var(--mu);margin:10px 0}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;position:sticky;top:0;background:var(--bg);z-index:5}
+header .logo{font-size:28px}
+nav{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:auto;display:flex;background:var(--sf);z-index:5;padding-bottom:env(safe-area-inset-bottom)}
+nav b{flex:1;text-align:center;padding:14px 0;font-size:20px;opacity:.5;cursor:pointer}nav b.on{opacity:1}
+.av{width:40px;height:40px;border-radius:50%;object-fit:cover;background:var(--ac2);display:flex;align-items:center;justify-content:center;font-weight:800;color:#14111f;flex:none}
+.h{display:flex;align-items:center;gap:10px;padding:8px 12px}.sp{flex:1}
+.card{margin-bottom:18px}.card img,.card video{width:100%;max-height:560px;object-fit:cover;display:block;background:#000}
+.ac{padding:8px 12px;display:flex;gap:14px;align-items:center}.card p{padding:0 12px}
+.stl{display:flex;gap:12px;overflow-x:auto;padding:8px 12px}.stl div{text-align:center;font-size:12px;flex:none;cursor:pointer}
+.ring{padding:3px;border-radius:50%;background:linear-gradient(135deg,var(--ac),var(--ac2));display:inline-block}.ring .av{border:3px solid var(--bg);width:58px;height:58px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}.grid img,.grid video{width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer}
+.grid .t{aspect-ratio:1;background:var(--sf);padding:8px;font-size:13px;overflow:hidden;cursor:pointer}
+.pf{padding:14px}.pf .av{width:84px;height:84px;font-size:32px}.cnt{display:flex;gap:22px;margin:10px 0;text-align:center}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+#reels{height:calc(100vh - 56px);overflow-y:scroll;scroll-snap-type:y mandatory}
+.rl{height:calc(100vh - 56px);scroll-snap-align:start;position:relative;background:#000}
+.rl video{width:100%;height:100%;object-fit:cover}
+.rl .ov{position:absolute;bottom:14px;right:12px;left:70px;text-shadow:0 1px 4px #000}
+.rl .sd{position:absolute;bottom:20px;left:12px;display:flex;flex-direction:column;gap:18px;align-items:center;font-size:24px;text-shadow:0 1px 4px #000}
+.mdw{position:fixed;inset:0;background:#000c;z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.md{background:var(--bg);width:100%;max-width:480px;max-height:85vh;overflow:auto;padding:16px;border-radius:18px 18px 0 0}
+.st-v{position:fixed;inset:0;background:#000;z-index:30;display:flex;align-items:center;justify-content:center}.st-v img,.st-v video{max-width:100%;max-height:100%}
+.st-v .tp{position:absolute;top:14px;right:14px;left:14px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.li{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer}.li small{color:var(--mu);display:block}
+.ch{display:flex;flex-direction:column;height:calc(100vh - 64px)}#ms{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
+.m{max-width:78%;padding:8px 12px;border-radius:16px;background:var(--sf);align-self:flex-start;word-break:break-word}.m.me{background:#2d6b5e;align-self:flex-end}
+.m img,.m video{max-width:100%;border-radius:10px;margin-bottom:4px}.m small{display:block;color:#ffffff99;font-size:11px;margin-top:2px}.m a{margin-inline-end:8px}
+.in{display:flex;gap:6px;padding:8px;align-items:center}.in input{margin:0}
+.ad{padding:14px}.tabs{display:flex;gap:6px;margin:12px 0}.tabs button{flex:1}
+.ar{background:var(--sf);border-radius:12px;padding:12px;margin-bottom:8px}.ar small{color:var(--mu);display:block;margin:2px 0}
+.big{font-size:38px;font-weight:800;color:var(--ac)}.e{text-align:center;color:var(--mu);padding:40px}
+</style></head><body>
+<div id="app"></div><div id="ov"></div>
+<script>
+let T=localStorage.t,ME=null,poll=null,cur='home',adT=null;
+const $=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=async(a,d={})=>{try{const r=await(await fetch('/api',{method:'POST',body:JSON.stringify({a,t:T,...d})})).json();if(r.err){if(r.err=='auth'){logout();return null}alert(r.err);return null}return r}catch(e){alert('تعذّر الاتصال بالسيرفر');return null}};
+const rd=f=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result);x.readAsDataURL(f)});
+const av=u=>u.av?`<img class=av src="${u.av}">`:`<div class=av>${E(u.name[0]).toUpperCase()}</div>`;
+const med=p=>!p.media?'':p.mt=='v'?`<video src="${p.media}" controls playsinline></video>`:`<img src="${p.media}">`;
+const tm=t=>new Date(t*1000).toLocaleString('ar',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'});
+function modal(h){$('#ov').innerHTML=`<div class=mdw onclick="if(event.target==this)closeM()"><div class=md>${h}</div></div>`}
+function closeM(){$('#ov').innerHTML=''}
+function logout(){localStorage.removeItem('t');T=null;ME=null;clearInterval(poll);clearInterval(adT);authV()}
 
-PORT = int(os.environ.get("PORT", 8000))
-AU, AP = os.environ.get("ADMIN_USER", "1212"), os.environ.get("ADMIN_PASS", "5555")
-D = os.path.dirname(os.path.abspath(__file__)); U = os.path.join(D, "uploads"); os.makedirs(U, exist_ok=True)
-db = sqlite3.connect(os.path.join(D, "mi.db"), check_same_thread=False); db.row_factory = sqlite3.Row
-L = threading.Lock(); ADM = set()
-db.executescript("""
-create table if not exists users(id integer primary key,name text unique,pw text,bio text default '',av text default '',created real,last real default 0,seen real default 0,frozen int default 0);
-create table if not exists posts(id integer primary key,u int,kind text,media text,mt text,txt text,ts real);
-create table if not exists likes(p int,u int,primary key(p,u));
-create table if not exists comments(id integer primary key,p int,u int,txt text,ts real);
-create table if not exists follows(a int,b int,primary key(a,b));
-create table if not exists msgs(id integer primary key,f int,t int,txt text,media text,mt text,ts real,edited int default 0);
-create table if not exists blocks(a int,b int,primary key(a,b));
-create table if not exists restr(a int,b int,primary key(a,b));
-create table if not exists chatdel(u int,o int,ts real,primary key(u,o));
-create table if not exists notifs(id integer primary key,u int,txt text,ts real);
-create table if not exists sess(tok text primary key,u int);
-create table if not exists freq(a int,b int,primary key(a,b));
-create table if not exists sviews(p int,u int,ts real,primary key(p,u));""")
-for _s in ["alter table users add column dn text default ''", "alter table users add column priv int default 0", "alter table msgs add column seen int default 0",
-           "alter table msgs add column del int default 0", "alter table notifs add column seen int default 0", "alter table notifs add column k text default ''",
-           "alter table notifs add column x int default 0", "alter table comments add column r int default 0"]:
-    try: db.execute(_s)
-    except sqlite3.OperationalError: pass
-db.commit()
+/* ---------- auth ---------- */
+function authV(){$('#app').innerHTML=`<div id=au><div class=logo>Mi</div><p>شارك لحظاتك مع من تحب</p>
+<input id=un placeholder="اسم المستخدم" autocapitalize=off><input id=pw type=password placeholder="كلمة السر">
+<div class=row style="justify-content:center"><button onclick="go('login')">تسجيل الدخول</button><button class=g onclick="go('reg')">إنشاء حساب</button></div></div>`}
+async function go(a){const r=await api(a,{name:$('#un').value.trim(),pw:$('#pw').value});if(!r)return;T=r.t;localStorage.t=T;if(r.admin){adminV();return}ME=r.me;main()}
 
-def row(s, a=()):
-    with L: return [dict(r) for r in db.execute(s, a).fetchall()]
-def run(s, a=()):
-    with L:
-        c = db.execute(s, a); db.commit(); return c.lastrowid
-def Hs(p): return hashlib.sha256(("mi$" + p).encode()).hexdigest()
-EXT = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov"}
-def save(d):
-    if not d or not d.startswith("data:"): return ""
-    h, b = d.split(",", 1); e = EXT.get(h[5:].split(";")[0])
-    if not e: return ""
-    n = uuid.uuid4().hex + "." + e
-    open(os.path.join(U, n), "wb").write(base64.b64decode(b)); return "/uploads/" + n
-def MT(m): return "v" if m.endswith((".mp4", ".webm", ".mov")) else ("i" if m else "")
-def N(u, t, me, k="", x=0):
-    if u != me: run("insert into notifs(u,txt,ts,k,x) values(?,?,?,?,?)", (u, t, time.time(), k, x))
-def P(me, where, lim=60):
-    return row("select p.*,u.name,u.av,(select count(*) from likes where p=p.id) likes,(select count(*) from likes where p=p.id and u=?) liked,(select count(*) from comments where p=p.id) cc,(select count(*) from sviews where p=p.id) vc from posts p join users u on u.id=p.u where u.frozen=0 and " + where + " order by p.id desc limit ?", (me, lim))
-def wipe(i):
-    for s in ["delete from posts where u=?1", "delete from likes where u=?1", "delete from comments where u=?1", "delete from follows where a=?1 or b=?1", "delete from msgs where f=?1 or t=?1", "delete from blocks where a=?1 or b=?1", "delete from restr where a=?1 or b=?1", "delete from sess where u=?1", "delete from notifs where u=?1", "delete from users where id=?1"]:
-        run(s, (i,))
-def auth(t):
-    if t in ADM: return -1
-    r = row("select u from sess where tok=?", (t,))
-    if not r: return None
-    x = row("select frozen from users where id=?", (r[0]["u"],))
-    if not x or x[0]["frozen"]: return None
-    run("update users set seen=? where id=?", (time.time(), r[0]["u"])); return r[0]["u"]
+/* ---------- main shell ---------- */
+function main(){$('#app').innerHTML=`<header><div class=logo>Mi</div><a onclick="show('notifs')" style="font-size:22px">🔔</a></header><div id=v></div>
+<nav><b data-t=home onclick="show('home')">🏠</b><b data-t=search onclick="show('search')">🔍</b><b onclick="newM()">➕</b><b data-t=reels onclick="show('reels')">🎬</b><b data-t=chats onclick="show('chats')">💬</b><b data-t=me onclick="show('me')">👤</b></nav>`;show('home')}
+function show(t){cur=t;clearInterval(poll);document.querySelectorAll('nav b').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
+({home:homeV,search:searchV,reels:reelsV,chats:chatsV,me:()=>prof(ME.id),notifs:notifV})[t]()}
 
-if not row("select 1 from users where name='Mi'"): run("insert into users(name,pw,dn,created) values('Mi',?,'Mi',?)", (uuid.uuid4().hex, time.time()))
-MI = row("select id from users where name='Mi'")[0]["id"]
+/* ---------- feed / stories / posts ---------- */
+const card=p=>`<div class=card><div class=h onclick="prof(${p.u})">${av(p)}<b>${E(p.name)}</b><span class=sp></span>${p.u==ME.id?`<a onclick="event.stopPropagation();editPost(${p.id})">✏️</a><a onclick="event.stopPropagation();delPost(${p.id})">🗑</a>`:''}</div>${med(p)}
+<div class=ac><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬 ${p.cc}</a></div>${p.txt?`<p><b>${E(p.name)}</b> ${E(p.txt)}</p>`:''}</div>`;
+async function homeV(){const j=await api('feed');if(!j)return;const g={};j.stories.forEach(s=>(g[s.u]=g[s.u]||[]).unshift(s));window.SG=Object.values(g);
+V().innerHTML=`<div class=stl>${SG.map((x,i)=>`<div onclick="story(${i})"><span class=ring>${av(x[0])}</span><br>${E(x[0].name)}</div>`).join('')}</div>`+(j.posts.map(card).join('')||`<div class=e>لا توجد منشورات بعد.<br>تابع أشخاصاً أو انشر أول منشور لك.</div>`)}
+const V=()=>$('#v');
+async function like(id,el){const r=await api('like',{p:id});if(!r)return;el.textContent=r.liked?'❤️':'🤍';el.nextElementSibling.textContent=r.likes}
+async function delPost(id){if(confirm('حذف المنشور نهائياً؟')){await api('delpost',{id});show(cur)}}
+async function editPost(id){const t=prompt('عدّل النص:');if(t!==null){await api('editpost',{id,txt:t});show(cur)}}
+function story(i){const it=SG[i];let k=0;const w=document.createElement('div');w.className='st-v';
+const draw=()=>{const s=it[k];w.innerHTML=`${s.mt=='v'?`<video src="${s.media}" autoplay playsinline></video>`:`<img src="${s.media}">`}<div class=tp><span style="color:#fff">${E(s.name)} · ${tm(s.ts)}</span><span>${s.u==ME.id?`<button class=d id=sd>حذف</button> `:''}<button class=g id=sx>✕</button></span></div>`;
+$('#ov').appendChild(w);w.querySelector('#sx').onclick=()=>{w.remove();clearTimeout(tm_)};const d=w.querySelector('#sd');if(d)d.onclick=async()=>{await api('delpost',{id:s.id});w.remove();show('home')};
+w.onclick=e=>{if(e.target.tagName=='IMG'||e.target.tagName=='VIDEO'){clearTimeout(tm_);if(++k<it.length)draw();else w.remove()}};clearTimeout(tm_);tm_=setTimeout(()=>{if(++k<it.length)draw();else w.remove()},s.mt=='v'?15000:5000)};let tm_;draw()}
+async function cmts(p){const r=await api('cmts',{p});if(!r)return;modal(`<h3>التعليقات</h3>${r.c.map(c=>`<div class=li style="padding:6px 0">${av(c)}<div><b>${E(c.name)}</b> ${E(c.txt)}</div>${c.u==ME.id?`<a onclick="delC(${c.id},${p})">🗑</a>`:''}</div>`).join('')||'<div class=e>لا تعليقات</div>'}<div class=in><input id=ci placeholder="أضف تعليقاً..."><button onclick="addC(${p})">نشر</button></div>`)}
+async function addC(p){const t=$('#ci').value;if(t.trim()){await api('comment',{p,txt:t});cmts(p)}}
+async function delC(id,p){await api('delcmt',{id});cmts(p)}
 
-def act(a, d):
-    now = time.time(); g = d.get
-    if a == "reg":
-        n, p = g("name", "").strip(), g("pw", "")
-        if not re.fullmatch(r"[A-Za-z0-9_.]{3,20}", n) or len(p) < 4: return {"err": "اسم المستخدم 3-20 حرف انجليزي أو أرقام، وكلمة السر 4 أحرف على الأقل"}
-        if n == AU or n.lower() == "mi": return {"err": "الاسم غير متاح"}
-        try: run("insert into users(name,pw,dn,av,created,last) values(?,?,?,?,?,?)", (n, Hs(p), g("dn", "").strip()[:40], save(g("av")), now, now))
-        except sqlite3.IntegrityError: return {"err": "اسم المستخدم مستخدم"}
-        a = "login"
-    if a == "login":
-        n, p = g("name", ""), g("pw", "")
-        if n == AU and p == AP:
-            t = uuid.uuid4().hex; ADM.add(t); return {"t": t, "admin": 1}
-        r = row("select * from users where name=? and pw=?", (n, Hs(p)))
-        if not r: return {"err": "اسم المستخدم أو كلمة السر خاطئة"}
-        if r[0]["frozen"]: return {"err": "هذا الحساب مجمّد"}
-        t = uuid.uuid4().hex; run("insert into sess values(?,?)", (t, r[0]["id"])); run("update users set last=?,seen=? where id=?", (now, now, r[0]["id"]))
-        return {"t": t, "me": {"id": r[0]["id"], "name": n, "av": r[0]["av"]}}
-    u = auth(g("t"))
-    if u is None: return {"err": "auth"}
-    if u == -1:
-        if a == "me": return {"admin": 1}
-        if a == "adm":
-            us = row("select id,name,created,last,seen,frozen from users where name!='Mi' order by id desc")
-            return {"users": us, "total": len(us), "online": sum(1 for x in us if x["seen"] > now - 60 and not x["frozen"])}
-        if a == "freeze": run("update users set frozen=? where id=?", (g("v", 1), g("id"))); return {}
-        if a == "deluser": wipe(g("id")); return {}
-        if a == "bcast":
-            for r_ in row("select id from users where frozen=0 and name!='Mi'"): run("insert into notifs(u,txt,ts,k) values(?,?,?,?)", (r_["id"], "📢 Mi: " + g("txt", "")[:500], now, "b"))
-            return {}
-        if a == "amsg": run("insert into msgs(f,t,txt,ts) values(?,?,?,?)", (MI, g("id"), g("txt", "")[:2000], now)); return {}
-        if a == "aconv":
-            run("update msgs set seen=1 where t=?", (MI,))
-            return {"m": row("select * from msgs where (f=?1 and t=?2) or (f=?2 and t=?1) order by id", (MI, g("id")))}
-        return {"err": "?"}
-    BL = "(select b from blocks where a=%d union select a from blocks where b=%d)" % (u, u)
-    if a == "me": return {"me": row("select id,name,av from users where id=?", (u,))[0]}
-    if a == "feed":
-        ids = "(select b from follows where a=%d union select %d)" % (u, u)
-        return {"posts": P(u, "p.kind='post' and p.u in %s and p.u not in %s" % (ids, BL)), "stories": P(u, "p.kind='story' and p.ts>%f and (p.u in %s or u.priv=0) and p.u not in %s" % (now - 86400, ids, BL), 100)}
-    if a == "reels": return {"posts": P(u, "p.kind='reel' and p.u not in " + BL)}
-    if a == "new":
-        k, m = g("kind"), save(g("media"))
-        if k not in ("post", "story", "reel") or (k != "post" and not m) or (not m and not g("txt", "").strip()): return {"err": "أضف ملفاً أو نصاً"}
-        run("insert into posts(u,kind,media,mt,txt,ts) values(?,?,?,?,?,?)", (u, k, m, MT(m), g("txt", "")[:2000], now)); return {}
-    if a == "editpost": run("update posts set txt=? where id=? and u=?", (g("txt", "")[:2000], g("id"), u)); return {}
-    if a == "delpost": run("delete from posts where id=? and u=?", (g("id"), u)); run("delete from comments where p=?", (g("id"),)); return {}
-    if a == "like":
-        p = g("p")
-        if row("select 1 from likes where p=? and u=?", (p, u)): run("delete from likes where p=? and u=?", (p, u))
-        else:
-            run("insert into likes values(?,?)", (p, u)); o = row("select u from posts where id=?", (p,))
-            if o: N(o[0]["u"], "أعجب بمنشورك: " + row("select name from users where id=?", (u,))[0]["name"], u)
-        return {"likes": row("select count(*) c from likes where p=?", (p,))[0]["c"], "liked": bool(row("select 1 from likes where p=? and u=?", (p, u)))}
-    if a == "cmts":
-        p = g("p")
-        return {"c": row("select c.*,us.name,us.av from comments c join users us on us.id=c.u where c.p=?1 and (c.u=?2 or ?2=(select u from posts where id=?1) or c.u not in (select b from restr where a=(select u from posts where id=?1))) order by case when c.r>0 then c.r else c.id end,c.id", (p, u))}
-    if a == "comment":
-        t = g("txt", "").strip()[:500]
-        if t:
-            run("insert into comments(p,u,txt,ts,r) values(?,?,?,?,?)", (g("p"), u, t, now, int(g("r", 0) or 0))); o = row("select u from posts where id=?", (g("p"),))
-            if o: N(o[0]["u"], "علّق على منشورك: " + row("select name from users where id=?", (u,))[0]["name"], u)
-        return {}
-    if a == "delcmt": run("delete from comments where id=? and u=?", (g("id"), u)); return {}
-    if a == "search":
-        return {"us": row("select id,name,av,(select count(*) from follows where a=? and b=users.id) isf from users where name like ? and name!='Mi' and frozen=0 and id!=? and id not in " + BL + " limit 30", (u, "%" + g("q", "") + "%", u))}
-    if a == "follow":
-        i = g("id")
-        nm = row("select name from users where id=?", (u,))[0]["name"]
-        if row("select 1 from follows where a=? and b=?", (u, i)): run("delete from follows where a=? and b=?", (u, i))
-        elif row("select 1 from freq where a=? and b=?", (u, i)): run("delete from freq where a=? and b=?", (u, i))
-        elif row("select priv from users where id=?", (i,))[0]["priv"]: run("insert into freq values(?,?)", (u, i)); N(i, "طلب متابعتك: " + nm, u, "req", u)
-        else: run("insert into follows values(?,?)", (u, i)); N(i, "بدأ بمتابعتك: " + nm, u)
-        return {}
-    if a in ("block", "restrict"):
-        t = "blocks" if a == "block" else "restr"; i = g("id")
-        if row("select 1 from %s where a=? and b=?" % t, (u, i)): run("delete from %s where a=? and b=?" % t, (u, i))
-        else:
-            run("insert into %s values(?,?)" % t, (u, i))
-            if a == "block": run("delete from follows where (a=? and b=?) or (a=? and b=?)", (u, i, i, u))
-        return {}
-    if a == "lists":
-        return {"bl": row("select id,name,av from users where id in (select b from blocks where a=?)", (u,)), "rs": row("select id,name,av from users where id in (select b from restr where a=?)", (u,))}
-    if a == "profile":
-        i = g("id", u); r = row("select id,name,dn,priv,seen,bio,av from users where id=? and frozen=0", (i,))
-        if not r or row("select 1 from blocks where a=? and b=?", (i, u)): return {"err": "الحساب غير موجود"}
-        return {"u": r[0], "fers": row("select count(*) c from follows where b=?", (i,))[0]["c"], "fing": row("select count(*) c from follows where a=?", (i,))[0]["c"],
-                "isf": bool(row("select 1 from follows where a=? and b=?", (u, i))), "isb": bool(row("select 1 from blocks where a=? and b=?", (u, i))), "isr": bool(row("select 1 from restr where a=? and b=?", (u, i))),
-                "isq": bool(row("select 1 from freq where a=? and b=?", (u, i))),
-                "lock": bool(r[0]["priv"] and int(i) != u and not row("select 1 from follows where a=? and b=?", (u, i))),
-                "posts": [] if (r[0]["priv"] and int(i) != u and not row("select 1 from follows where a=? and b=?", (u, i))) else P(u, "p.u=%d and p.kind in ('post','reel')" % int(i))}
-    if a == "editprofile":
-        n = g("name", "").strip()
-        if not re.fullmatch(r"[A-Za-z0-9_.]{3,20}", n) or n == AU: return {"err": "اسم مستخدم غير صالح"}
-        av = save(g("av")) or row("select av from users where id=?", (u,))[0]["av"]
-        try: run("update users set name=?,bio=?,av=?,dn=?,priv=? where id=?", (n, g("bio", "")[:300], av, g("dn", "")[:40], 1 if g("priv") else 0, u))
-        except sqlite3.IntegrityError: return {"err": "اسم المستخدم مستخدم"}
-        return {"me": row("select id,name,av from users where id=?", (u,))[0]}
-    if a in ("accept", "decline"):
-        i = g("id")
-        if a == "accept": run("insert or ignore into follows values(?,?)", (i, u))
-        run("delete from freq where a=? and b=?", (i, u)); run("delete from notifs where u=? and k='req' and x=?", (u, i)); return {}
-    if a == "badge": return {"m": row("select count(*) c from msgs where t=? and seen=0 and del=0", (u,))[0]["c"], "n": row("select count(*) c from notifs where u=? and seen=0", (u,))[0]["c"]}
-    if a == "sview": run("insert or ignore into sviews values(?,?,?)", (g("p"), u, now)); return {}
-    if a == "sviewers": return {"v": row("select us.id,us.name,us.av from sviews s join users us on us.id=s.u where s.p=? and (select u from posts where id=?)=? order by s.ts desc", (g("p"), g("p"), u))}
-    if a == "chats":
-        cd = {r["o"]: r["ts"] for r in row("select o,ts from chatdel where u=?", (u,))}; out = {}
-        for m in row("select * from msgs where f=? or t=? order by id", (u, u)):
-            o = m["t"] if m["f"] == u else m["f"]
-            if m["ts"] > cd.get(o, 0): out[o] = m
-        res = []
-        for o, m in sorted(out.items(), key=lambda x: -x[1]["id"]):
-            x = row("select id,name,av,seen from users where id=? and frozen=0", (o,))
-            if x: res.append({**x[0], "last": ("🚫 رسالة محذوفة" if m["del"] else (m["txt"] or ("📎 صورة" if m["mt"] == "i" else "📎 فيديو"))), "ts": m["ts"]})
-        return {"chats": res}
-    if a == "msgs":
-        o = g("o"); cd = row("select ts from chatdel where u=? and o=?", (u, o)); run("update msgs set seen=1 where f=? and t=?", (o, u))
-        return {"s": row("select seen from users where id=?", (o,))[0]["seen"], "m": row("select * from msgs where ((f=?1 and t=?2) or (f=?2 and t=?1)) and ts>?3 order by id", (u, o, cd[0]["ts"] if cd else 0))}
-    if a == "send":
-        o = g("o")
-        if row("select 1 from blocks where (a=? and b=?) or (a=? and b=?)", (u, o, o, u)): return {"err": "لا يمكن إرسال رسالة لهذا المستخدم"}
-        po = row("select priv from users where id=?", (o,))
-        if po and po[0]["priv"] and u != MI and not row("select 1 from follows where a=? and b=?", (u, o)): return {"err": "هذا حساب خاص، يجب أن يقبل طلب المتابعة أولاً"}
-        m = save(g("media")); t = g("txt", "").strip()[:2000]
-        pp = row("select * from posts where id=?", (g("ref"),)) if g("ref") else []
-        if pp: m = pp[0]["media"]; t = ("📤 " + (pp[0]["txt"] or ""))[:2000]
-        if m or t: run("insert into msgs(f,t,txt,media,mt,ts) values(?,?,?,?,?,?)", (u, o, t, m, MT(m), now))
-        return {}
-    if a == "editmsg": run("update msgs set txt=?,edited=1 where id=? and f=?", (g("txt", "")[:2000], g("id"), u)); return {}
-    if a == "delmsg": run("update msgs set del=1,txt='',media='',mt='' where id=? and f=?", (g("id"), u)); return {}
-    if a == "delchat": run("insert or replace into chatdel values(?,?,?)", (u, g("o"), now)); return {}
-    if a == "notifs":
-        r_ = row("select * from notifs where u=? order by id desc limit 50", (u,)); run("update notifs set seen=1 where u=?", (u,)); return {"n": r_}
-    return {"err": "?"}
+/* ---------- create ---------- */
+function newM(){modal(`<h3>إنشاء</h3><div class=row><button class=g onclick="K='post';$('#kd').textContent='منشور'">منشور</button><button class=g onclick="K='story';$('#kd').textContent='قصة'">قصة</button><button class=g onclick="K='reel';$('#kd').textContent='ريل (فيديو)'">ريل</button></div><p>النوع: <b id=kd>منشور</b></p>
+<input type=file id=nf accept="image/*,video/*"><textarea id=nt rows=3 placeholder="اكتب شيئاً... (يمكن نشر نص فقط)"></textarea><button onclick="publish()" id=pb>نشر</button>`);K='post'}
+let K='post';
+async function publish(){const f=$('#nf').files[0];if(f&&f.size>50e6)return alert('الملف أكبر من 50MB');if(K=='reel'&&(!f||!f.type.startsWith('video')))return alert('الريل يجب أن يكون فيديو');
+$('#pb').disabled=true;$('#pb').textContent='جارٍ الرفع...';const r=await api('new',{kind:K,media:f?await rd(f):'',txt:$('#nt').value});closeM();if(r)show(K=='reel'?'reels':'home')}
 
-class Hd(http.server.BaseHTTPRequestHandler):
-    def log_message(s, *a): pass
-    def do_GET(s):
-        p = s.path.split("?")[0]
-        f = os.path.join(D, "index.html") if p == "/" else os.path.join(U, os.path.basename(p)) if p.startswith("/uploads/") else None
-        if not f or not os.path.isfile(f): s.send_error(404); return
-        b = open(f, "rb").read(); ct = mimetypes.guess_type(f)[0] or "text/html"; st = 200; hd = {}
-        if ct == "text/html": ct += "; charset=utf-8"
-        m = re.match(r"bytes=(\d*)-(\d*)", s.headers.get("Range", ""))
-        if m and p != "/":
-            a0 = int(m.group(1) or 0); a1 = int(m.group(2)) if m.group(2) else len(b) - 1
-            hd["Content-Range"] = "bytes %d-%d/%d" % (a0, a1, len(b)); b = b[a0:a1 + 1]; st = 206
-        s.send_response(st); s.send_header("Content-Type", ct); s.send_header("Content-Length", len(b)); s.send_header("Accept-Ranges", "bytes")
-        for k, v in hd.items(): s.send_header(k, v)
-        s.end_headers(); s.wfile.write(b)
-    def do_POST(s):
-        try:
-            n = int(s.headers.get("Content-Length", 0))
-            if n > 80_000_000: raise ValueError
-            d = json.loads(s.rfile.read(n)); r = act(d.get("a"), d)
-        except Exception as e: r = {"err": "خطأ في الطلب"}
-        b = json.dumps(r).encode(); s.send_response(200); s.send_header("Content-Type", "application/json"); s.send_header("Content-Length", len(b)); s.end_headers(); s.wfile.write(b)
+/* ---------- reels ---------- */
+async function reelsV(){const j=await api('reels');if(!j)return;
+V().innerHTML=`<div id=reels>${j.posts.map(p=>`<div class=rl><video src="${p.media}" loop playsinline onclick="this.paused?this.play():this.pause()"></video><div class=ov><b onclick="prof(${p.u})">@${E(p.name)}</b><br>${E(p.txt)}</div><div class=sd><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬</a><span>${p.cc}</span>${p.u==ME.id?`<a onclick="delPost(${p.id})">🗑</a>`:''}</div></div>`).join('')||'<div class=e>لا توجد ريلز بعد</div>'}</div>`;
+const io=new IntersectionObserver(es=>es.forEach(e=>{const v=e.target.querySelector('video');e.isIntersecting?v.play().catch(()=>{}):v.pause()}),{threshold:.7});document.querySelectorAll('.rl').forEach(x=>io.observe(x))}
 
-if __name__ == "__main__":
-    print("Mi running on port", PORT)
-    http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Hd).serve_forever()
-          
+/* ---------- search ---------- */
+function searchV(){V().innerHTML=`<div style="padding:0 14px"><input id=q placeholder="ابحث عن أصدقاء..." oninput="doS()"></div><div id=sr></div>`}
+async function doS(){const r=await api('search',{q:$('#q').value});if(r)$('#sr').innerHTML=r.us.map(u=>`<div class=li onclick="prof(${u.id})">${av(u)}<b>${E(u.name)}</b><span class=sp></span><small>${u.isf?'تتابعه':''}</small></div>`).join('')||'<div class=e>لا نتائج</div>'}
+
+/* ---------- profile ---------- */
+async function prof(id){const r=await api('profile',{id});if(!r)return;clearInterval(poll);const u=r.u,me=u.id==ME.id;
+V().innerHTML=`<div class=pf><div class=h style="padding:0;gap:16px">${av(u)}<div class=cnt style="margin:0"><div><b>${r.posts.length}</b><br>منشور</div><div><b>${r.fers}</b><br>متابع</div><div><b>${r.fing}</b><br>يتابع</div></div></div>
+<h3 style="margin-top:8px">${E(u.name)}</h3><p>${E(u.bio)}</p><div class=row>${me?`<button onclick="editProf()">تعديل الملف</button><button class=g onclick="lists()">المحظورون والمحصورون</button><button class=g onclick="logout()">خروج</button>`:
+`<button onclick="act('follow',${u.id})">${r.isf?'إلغاء المتابعة':'متابعة'}</button><button class=g onclick="chat(${u.id},'${E(u.name)}')">رسالة</button><button class=g onclick="act('restrict',${u.id})">${r.isr?'إلغاء التقييد':'تقييد'}</button><button class=d onclick="act('block',${u.id})">${r.isb?'إلغاء الحظر':'حظر'}</button>`}</div></div>
+<div class=grid>${r.posts.map(p=>p.mt=='v'?`<video src="${p.media}" onclick="one(${p.id})"></video>`:p.media?`<img src="${p.media}" onclick="one(${p.id})">`:`<div class=t onclick="one(${p.id})">${E(p.txt)}</div>`).join('')}</div>`;window.PP=r.posts}
+async function act(a,id){await api(a,{id});prof(id)}
+function one(id){const p=PP.find(x=>x.id==id);modal(card(p))}
+function editProf(){modal(`<h3>تعديل الملف الشخصي</h3><input type=file id=ef accept="image/*"><input id=en value="${E(ME.name)}"><textarea id=eb rows=3 placeholder="نبذة عنك"></textarea><button onclick="saveProf()">حفظ</button>`);api('profile',{id:ME.id}).then(r=>r&&($('#eb').value=r.u.bio))}
+async function saveProf(){const f=$('#ef').files[0],r=await api('editprofile',{name:$('#en').value,bio:$('#eb').value,av:f?await rd(f):''});if(r){ME=r.me;closeM();prof(ME.id)}}
+async function lists(){const r=await api('lists');const f=a=>a.map(u=>`<div class=li onclick="closeM();prof(${u.id})">${av(u)}<b>${E(u.name)}</b></div>`).join('')||'<div class=e>لا أحد</div>';modal(`<h3>الأشخاص المحظورون</h3>${f(r.bl)}<h3>الأشخاص المحصورون</h3>${f(r.rs)}`)}
+
+/* ---------- notifications ---------- */
+async function notifV(){const r=await api('notifs');V().innerHTML=`<h3 style="padding:0 14px">الإشعارات</h3>`+(r.n.map(n=>`<div class=li><div>${E(n.txt)}<small>${tm(n.ts)}</small></div></div>`).join('')||'<div class=e>لا إشعارات</div>')}
+
+/* ---------- chats ---------- */
+async function chatsV(){const r=await api('chats');V().innerHTML=`<div style="padding:0 14px"><h3>الرسائل</h3><p style="color:var(--mu)">للبدء بمحادثة جديدة ابحث عن شخص وافتح ملفه.</p></div>`+(r.chats.map(c=>`<div class=li onclick="chat(${c.id},'${E(c.name)}')">${av(c)}<div><b>${E(c.name)}</b><small>${E(c.last)}</small></div></div>`).join('')||'<div class=e>لا محادثات</div>')}
+let lastS='';
+function chat(o,name){clearInterval(poll);lastS='';V().innerHTML=`<div class=ch><div class=h><a onclick="show('chats')">➡️ رجوع</a><b onclick="prof(${o})">${name}</b><span class=sp></span><a onclick="delChat(${o})">🗑 حذف المحادثة</a></div><div id=ms></div><div class=in><label>📎<input type=file hidden id=cf accept="image/*,video/*" onchange="send(${o})"></label><input id=ct placeholder="اكتب رسالة..." onkeydown="if(event.key=='Enter')send(${o})"><button onclick="send(${o})">إرسال</button></div></div>`;loadM(o);poll=setInterval(()=>loadM(o),3000)}
+async function loadM(o){const r=await fetch('/api',{method:'POST',body:JSON.stringify({a:'msgs',t:T,o})}).then(x=>x.json()).catch(()=>null);if(!r||!r.m)return;const s=JSON.stringify(r.m);if(s==lastS)return;lastS=s;const b=$('#ms');if(!b)return;
+b.innerHTML=r.m.map(m=>{const me=m.f==ME.id;return `<div class="m${me?' me':''}">${m.media?(m.mt=='v'?`<video src="${m.media}" controls playsinline></video>`:`<img src="${m.media}">`):''}${E(m.txt)}<small>${me?`<a onclick="edM(${m.id},${o})">✏️</a><a onclick="dlM(${m.id},${o})">🗑</a>`:''}${tm(m.ts)}${m.edited?' · معدّلة':''}</small></div>`}).join('');b.scrollTop=b.scrollHeight}
+async function send(o){const f=$('#cf').files[0],t=$('#ct').value;if(!f&&!t.trim())return;$('#ct').value='';const r=await api('send',{o,txt:t,media:f?await rd(f):''});$('#cf').value='';lastS='';if(r)loadM(o)}
+async function edM(id,o){const t=prompt('عدّل الرسالة:');if(t!==null){await api('editmsg',{id,txt:t});lastS='';loadM(o)}}
+async function dlM(id,o){if(confirm('حذف الرسالة لدى الجميع؟')){await api('delmsg',{id});lastS='';loadM(o)}}
+async function delChat(o){if(confirm('حذف المحادثة من عندك؟')){await api('delchat',{o});show('chats')}}
+
+/* ---------- developer panel ---------- */
+let AT='acc',AD=null;
+async function adminV(){$('#app').innerHTML=`<div class=ad><div class=h style="padding:0"><div class=logo style="font-size:30px">Mi · لوحة التحكم</div><span class=sp></span><button class=g onclick="logout()">خروج</button></div>
+<div class=tabs><button onclick="AT='acc';adR()">إدارة الحسابات</button><button onclick="AT='frz';adR()">الحسابات المجمّدة</button><button onclick="AT='st';adR()">الإحصائيات</button></div><div id=ab></div></div>`;await adL();clearInterval(adT);adT=setInterval(adL,5000)}
+async function adL(){const r=await api('adm');if(r){AD=r;adR()}}
+function adR(){if(!AD||!$('#ab'))return;const us=AD.users,d=t=>t?new Date(t*1000).toLocaleString('ar'):'-';
+if(AT=='st')$('#ab').innerHTML=`<div class=ar><div class=big>${AD.online}</div>مستخدم نشط الآن</div><div class=ar><div class=big>${AD.total}</div>حساب تم إنشاؤه</div>`;
+else{const l=us.filter(u=>AT=='frz'?u.frozen:true);$('#ab').innerHTML=(AT=='acc'?`<p style="color:var(--mu)">عدد الحسابات: ${us.length}</p>`:'')+(l.map(u=>`<div class=ar><b>${E(u.name)}</b> ${u.frozen?'🧊':''}<small>تاريخ الإنشاء: ${d(u.created)}</small><small>آخر دخول: ${d(u.last)}</small><div class=row>${u.frozen?`<button onclick="adA('freeze',${u.id},0)">فك التجميد</button>`:`<button class=g onclick="adA('freeze',${u.id},1)">تجميد</button>`}<button class=d onclick="if(confirm('حذف نهائي لا رجعة فيه؟'))adA('deluser',${u.id})">حذف نهائي</button></div></div>`).join('')||'<div class=e>لا حسابات</div>')}}
+async function adA(a,id,v){await api(a,{id,v});adL()}
+
+/* ---------- start ---------- */
+(async()=>{if(!T)return authV();const r=await api('me');if(!r)return;if(r.admin)adminV();else{ME=r.me;main()}})();
+</script></body></html>
+           
