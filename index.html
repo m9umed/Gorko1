@@ -44,6 +44,13 @@ nav b{flex:1;text-align:center;padding:14px 0;font-size:20px;opacity:.5;cursor:p
 .ad{padding:14px}.tabs{display:flex;gap:6px;margin:12px 0}.tabs button{flex:1}
 .ar{background:var(--sf);border-radius:12px;padding:12px;margin-bottom:8px}.ar small{color:var(--mu);display:block;margin:2px 0}
 .big{font-size:38px;font-weight:800;color:var(--ac)}.e{text-align:center;color:var(--mu);padding:40px}
+body.light{--bg:#f6f3ec;--sf:#fff;--tx:#1b1726;--mu:#6b6580;--ac:#12a58a}.m.me{color:#fff}
+*{-webkit-tap-highlight-color:rgba(110,231,200,.35)}
+a:active,.li:active,nav b:active,.stl div:active{background:rgba(110,231,200,.22);border-radius:10px}
+button:active{filter:brightness(.8);transform:scale(.96)}
+.av{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ac2),0 6px 14px #0004}
+.dot{position:relative}.dot::after{content:'';position:absolute;top:4px;left:calc(50% + 6px);width:11px;height:11px;border-radius:50%;background:#ff3b4e;border:2px solid var(--bg)}
+.rp{position:absolute;bottom:16px;left:12px;right:12px;display:flex;gap:8px;align-items:center;font-size:26px}.rp input{margin:0}
 </style></head><body>
 <div id="app"></div><div id="ov"></div>
 <script>
@@ -56,23 +63,29 @@ const med=p=>!p.media?'':p.mt=='v'?`<video src="${p.media}" controls playsinline
 const tm=t=>new Date(t*1000).toLocaleString('ar',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'});
 function modal(h){$('#ov').innerHTML=`<div class=mdw onclick="if(event.target==this)closeM()"><div class=md>${h}</div></div>`}
 function closeM(){$('#ov').innerHTML=''}
-function logout(){localStorage.removeItem('t');T=null;ME=null;clearInterval(poll);clearInterval(adT);authV()}
+const stat=t=>t?(Date.now()/1000-t<60?'🟢 متصل الآن':'آخر ظهور '+tm(t)):'';
+let BT;async function bdg(){if(!T||!$('#dm'))return;const r=await fetch('/api',{method:'POST',body:JSON.stringify({a:'badge',t:T})}).then(x=>x.json()).catch(()=>0);if(!r||r.err)return;$('#dm').classList.toggle('dot',r.m>0);$('#nb').classList.toggle('dot',r.n>0)}
+function theme(){document.body.classList.toggle('light');localStorage.th=document.body.classList.contains('light')?1:''}
+if(localStorage.th)document.body.classList.add('light');
+function logout(){localStorage.removeItem('t');T=null;ME=null;clearInterval(poll);clearInterval(adT);clearInterval(BT);authV()}
 
 /* ---------- auth ---------- */
-function authV(){$('#app').innerHTML=`<div id=au><div class=logo>Mi</div><p>شارك لحظاتك مع من تحب</p>
-<input id=un placeholder="اسم المستخدم" autocapitalize=off><input id=pw type=password placeholder="كلمة السر">
-<div class=row style="justify-content:center"><button onclick="go('login')">تسجيل الدخول</button><button class=g onclick="go('reg')">إنشاء حساب</button></div></div>`}
-async function go(a){const r=await api(a,{name:$('#un').value.trim(),pw:$('#pw').value});if(!r)return;T=r.t;localStorage.t=T;if(r.admin){adminV();return}ME=r.me;main()}
+function authV(reg){$('#app').innerHTML=`<div id=au><div class=logo>Mi</div><p>${reg?'إنشاء حساب جديد':'شارك لحظاتك مع من تحب'}</p>
+${reg?`<label style="display:inline-block"><div id=pv class=av style="width:84px;height:84px;font-size:30px;margin:auto">📷</div><input type=file id=rf accept="image/*" hidden onchange="pvw(this)"></label><input id=dn placeholder="اسم الحساب (الاسم الظاهر)">`:''}
+<input id=un placeholder="اسم المستخدم" autocapitalize=off><input id=pw type=password placeholder="كلمة المرور">${reg?`<input id=pw2 type=password placeholder="تأكيد كلمة المرور">`:''}
+<div class=row style="justify-content:center">${reg?`<button onclick="go('reg')">إنشاء الحساب</button><button class=g onclick="authV()">لدي حساب</button>`:`<button onclick="go('login')">تسجيل الدخول</button><button class=g onclick="authV(1)">إنشاء حساب</button>`}</div></div>`}
+async function pvw(i){const f=i.files[0];if(f)$('#pv').innerHTML=`<img class=av style="width:84px;height:84px;box-shadow:none" src="${await rd(f)}">`}
+async function go(a){const d={name:$('#un').value.trim(),pw:$('#pw').value};if(a=='reg'){if(d.pw!=$('#pw2').value)return alert('كلمتا المرور غير متطابقتين');d.dn=$('#dn').value.trim();const f=$('#rf').files[0];if(f)d.av=await rd(f)}const r=await api(a,d);if(!r)return;T=r.t;localStorage.t=T;if(r.admin){adminV();return}ME=r.me;main()}
 
 /* ---------- main shell ---------- */
-function main(){$('#app').innerHTML=`<header><div class=logo>Mi</div><a onclick="show('notifs')" style="font-size:22px">🔔</a></header><div id=v></div>
-<nav><b data-t=home onclick="show('home')">🏠</b><b data-t=search onclick="show('search')">🔍</b><b onclick="newM()">➕</b><b data-t=reels onclick="show('reels')">🎬</b><b data-t=chats onclick="show('chats')">💬</b><b data-t=me onclick="show('me')">👤</b></nav>`;show('home')}
+function main(){$('#app').innerHTML=`<header><div class=logo>Mi</div><span><a onclick="theme()" style="font-size:22px">🌓</a> <a id=nb onclick="show('notifs')" style="font-size:22px">🔔</a></span></header><div id=v></div>
+<nav><b data-t=home onclick="show('home')">🏠</b><b data-t=search onclick="show('search')">🔍</b><b onclick="newM()">➕</b><b data-t=reels onclick="show('reels')">🎬</b><b id=dm data-t=chats onclick="show('chats')">💬</b><b data-t=me onclick="show('me')">👤</b></nav>`;show('home');bdg();clearInterval(BT);BT=setInterval(bdg,5000)}
 function show(t){cur=t;clearInterval(poll);document.querySelectorAll('nav b').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
 ({home:homeV,search:searchV,reels:reelsV,chats:chatsV,me:()=>prof(ME.id),notifs:notifV})[t]()}
 
 /* ---------- feed / stories / posts ---------- */
 const card=p=>`<div class=card><div class=h onclick="prof(${p.u})">${av(p)}<b>${E(p.name)}</b><span class=sp></span>${p.u==ME.id?`<a onclick="event.stopPropagation();editPost(${p.id})">✏️</a><a onclick="event.stopPropagation();delPost(${p.id})">🗑</a>`:''}</div>${med(p)}
-<div class=ac><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬 ${p.cc}</a></div>${p.txt?`<p><b>${E(p.name)}</b> ${E(p.txt)}</p>`:''}</div>`;
+<div class=ac><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬 ${p.cc}</a><a onclick="shr(${p.id})">📤</a></div>${p.txt?`<p><b>${E(p.name)}</b> ${E(p.txt)}</p>`:''}</div>`;
 async function homeV(){const j=await api('feed');if(!j)return;const g={};j.stories.forEach(s=>(g[s.u]=g[s.u]||[]).unshift(s));window.SG=Object.values(g);
 V().innerHTML=`<div class=stl>${SG.map((x,i)=>`<div onclick="story(${i})"><span class=ring>${av(x[0])}</span><br>${E(x[0].name)}</div>`).join('')}</div>`+(j.posts.map(card).join('')||`<div class=e>لا توجد منشورات بعد.<br>تابع أشخاصاً أو انشر أول منشور لك.</div>`)}
 const V=()=>$('#v');
@@ -80,11 +93,16 @@ async function like(id,el){const r=await api('like',{p:id});if(!r)return;el.text
 async function delPost(id){if(confirm('حذف المنشور نهائياً؟')){await api('delpost',{id});show(cur)}}
 async function editPost(id){const t=prompt('عدّل النص:');if(t!==null){await api('editpost',{id,txt:t});show(cur)}}
 function story(i){const it=SG[i];let k=0;const w=document.createElement('div');w.className='st-v';
-const draw=()=>{const s=it[k];w.innerHTML=`${s.mt=='v'?`<video src="${s.media}" autoplay playsinline></video>`:`<img src="${s.media}">`}<div class=tp><span style="color:#fff">${E(s.name)} · ${tm(s.ts)}</span><span>${s.u==ME.id?`<button class=d id=sd>حذف</button> `:''}<button class=g id=sx>✕</button></span></div>`;
-$('#ov').appendChild(w);w.querySelector('#sx').onclick=()=>{w.remove();clearTimeout(tm_)};const d=w.querySelector('#sd');if(d)d.onclick=async()=>{await api('delpost',{id:s.id});w.remove();show('home')};
+const draw=()=>{const s=it[k];w.innerHTML=`${s.mt=='v'?`<video src="${s.media}" autoplay playsinline></video>`:`<img src="${s.media}">`}<div class=tp><span style="color:#fff">${E(s.name)} · ${tm(s.ts)}</span><span>${s.u==ME.id?`<button class=g onclick="alert('👁 '+${s.vc}+' مشاهدة')" id=sv>👁 ${s.vc}</button> <button class=d id=sd>حذف</button> `:''}<button class=g id=sx>✕</button></span></div>${s.u==ME.id?'':`<div class=rp><input id=sr2 placeholder="رد على القصة..." onfocus="clearTimeout(tm_)"><button onclick="sRep(${s.u},$('#sr2').value)">إرسال</button><a onclick="sRep(${s.u},'❤️',1)">❤️</a><a onclick="sRep(${s.u},'😂',1)">😂</a><a onclick="sRep(${s.u},'🔥',1)">🔥</a></div>`}`;
+$('#ov').appendChild(w);if(s.u!=ME.id)api('sview',{p:s.id});w.querySelector('#sx').onclick=()=>{w.remove();clearTimeout(tm_)};const d=w.querySelector('#sd');if(d)d.onclick=async()=>{await api('delpost',{id:s.id});w.remove();show('home')};
 w.onclick=e=>{if(e.target.tagName=='IMG'||e.target.tagName=='VIDEO'){clearTimeout(tm_);if(++k<it.length)draw();else w.remove()}};clearTimeout(tm_);tm_=setTimeout(()=>{if(++k<it.length)draw();else w.remove()},s.mt=='v'?15000:5000)};let tm_;draw()}
-async function cmts(p){const r=await api('cmts',{p});if(!r)return;modal(`<h3>التعليقات</h3>${r.c.map(c=>`<div class=li style="padding:6px 0">${av(c)}<div><b>${E(c.name)}</b> ${E(c.txt)}</div>${c.u==ME.id?`<a onclick="delC(${c.id},${p})">🗑</a>`:''}</div>`).join('')||'<div class=e>لا تعليقات</div>'}<div class=in><input id=ci placeholder="أضف تعليقاً..."><button onclick="addC(${p})">نشر</button></div>`)}
-async function addC(p){const t=$('#ci').value;if(t.trim()){await api('comment',{p,txt:t});cmts(p)}}
+async function cmts(p){RP=0;const r=await api('cmts',{p});if(!r)return;modal(`<h3>التعليقات</h3>${r.c.map(c=>`<div class=li style="padding:6px 0;margin-inline-start:${c.r?36:0}px">${av(c)}<div><b>${E(c.name)}</b> ${E(c.txt)}</div><span class=sp></span><a onclick="RP=${c.r||c.id};$('#ci').placeholder='رد على ${E(c.name)}...';$('#ci').focus()">↩️</a>${c.u==ME.id?`<a onclick="delC(${c.id},${p})">🗑</a>`:''}</div>`).join('')||'<div class=e>لا تعليقات</div>'}<div class=in><input id=ci placeholder="أضف تعليقاً..."><button onclick="addC(${p})">نشر</button></div>`)}
+let RP=0;async function addC(p){const t=$('#ci').value;if(t.trim()){await api('comment',{p,txt:t,r:RP});RP=0;cmts(p)}}
+async function sRep(o,t,e){if(!t.trim())return;const r=await api('send',{o,txt:(e?'تفاعل مع قصتك: ':'↩️ رد على قصتك: ')+t});if(r)alert('تم الإرسال ✅')}
+async function shr(p){const r=await api('search',{q:''});if(r)modal(`<h3>مشاركة إلى</h3><input id=sq placeholder="بحث" oninput="shs(${p})"><div id=sl>${shl(r.us,p)}</div>`)}
+const shl=(us,p)=>us.map(u=>`<div class=li onclick="doShr(${p},${u.id})">${av(u)}<b>${E(u.name)}</b></div>`).join('')||'<div class=e>لا نتائج</div>';
+async function shs(p){const r=await api('search',{q:$('#sq').value});if(r)$('#sl').innerHTML=shl(r.us,p)}
+async function doShr(p,o){const r=await api('send',{o,ref:p});if(r){closeM();alert('تمت المشاركة ✅')}}
 async function delC(id,p){await api('delcmt',{id});cmts(p)}
 
 /* ---------- create ---------- */
@@ -96,7 +114,7 @@ $('#pb').disabled=true;$('#pb').textContent='جارٍ الرفع...';const r=awa
 
 /* ---------- reels ---------- */
 async function reelsV(){const j=await api('reels');if(!j)return;
-V().innerHTML=`<div id=reels>${j.posts.map(p=>`<div class=rl><video src="${p.media}" loop playsinline onclick="this.paused?this.play():this.pause()"></video><div class=ov><b onclick="prof(${p.u})">@${E(p.name)}</b><br>${E(p.txt)}</div><div class=sd><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬</a><span>${p.cc}</span>${p.u==ME.id?`<a onclick="delPost(${p.id})">🗑</a>`:''}</div></div>`).join('')||'<div class=e>لا توجد ريلز بعد</div>'}</div>`;
+V().innerHTML=`<div id=reels>${j.posts.map(p=>`<div class=rl><video src="${p.media}" loop playsinline onclick="this.paused?this.play():this.pause()"></video><div class=ov><b onclick="prof(${p.u})">@${E(p.name)}</b><br>${E(p.txt)}</div><div class=sd><a onclick="like(${p.id},this)">${p.liked?'❤️':'🤍'}</a><span>${p.likes}</span><a onclick="cmts(${p.id})">💬</a><span>${p.cc}</span><a onclick="shr(${p.id})">📤</a>${p.u==ME.id?`<a onclick="delPost(${p.id})">🗑</a>`:''}</div></div>`).join('')||'<div class=e>لا توجد ريلز بعد</div>'}</div>`;
 const io=new IntersectionObserver(es=>es.forEach(e=>{const v=e.target.querySelector('video');e.isIntersecting?v.play().catch(()=>{}):v.pause()}),{threshold:.7});document.querySelectorAll('.rl').forEach(x=>io.observe(x))}
 
 /* ---------- search ---------- */
@@ -106,39 +124,21 @@ async function doS(){const r=await api('search',{q:$('#q').value});if(r)$('#sr')
 /* ---------- profile ---------- */
 async function prof(id){const r=await api('profile',{id});if(!r)return;clearInterval(poll);const u=r.u,me=u.id==ME.id;
 V().innerHTML=`<div class=pf><div class=h style="padding:0;gap:16px">${av(u)}<div class=cnt style="margin:0"><div><b>${r.posts.length}</b><br>منشور</div><div><b>${r.fers}</b><br>متابع</div><div><b>${r.fing}</b><br>يتابع</div></div></div>
-<h3 style="margin-top:8px">${E(u.name)}</h3><p>${E(u.bio)}</p><div class=row>${me?`<button onclick="editProf()">تعديل الملف</button><button class=g onclick="lists()">المحظورون والمحصورون</button><button class=g onclick="logout()">خروج</button>`:
-`<button onclick="act('follow',${u.id})">${r.isf?'إلغاء المتابعة':'متابعة'}</button><button class=g onclick="chat(${u.id},'${E(u.name)}')">رسالة</button><button class=g onclick="act('restrict',${u.id})">${r.isr?'إلغاء التقييد':'تقييد'}</button><button class=d onclick="act('block',${u.id})">${r.isb?'إلغاء الحظر':'حظر'}</button>`}</div></div>
-<div class=grid>${r.posts.map(p=>p.mt=='v'?`<video src="${p.media}" onclick="one(${p.id})"></video>`:p.media?`<img src="${p.media}" onclick="one(${p.id})">`:`<div class=t onclick="one(${p.id})">${E(p.txt)}</div>`).join('')}</div>`;window.PP=r.posts}
+<h3 style="margin-top:8px">${E(u.dn||u.name)}${u.priv?' 🔒':''}</h3><small style="color:var(--mu)">@${E(u.name)} · ${stat(u.seen)}</small><p>${E(u.bio)}</p><div class=row>${me?`<button onclick="editProf()">تعديل الملف</button><button class=g onclick="lists()">المحظورون والمحصورون</button><button class=g onclick="logout()">خروج</button>`:
+`<button onclick="act('follow',${u.id})">${r.isf?'إلغاء المتابعة':r.isq?'إلغاء الطلب':'متابعة'}</button><button class=g onclick="chat(${u.id},'${E(u.name)}')">رسالة</button><button class=g onclick="act('restrict',${u.id})">${r.isr?'إلغاء التقييد':'تقييد'}</button><button class=d onclick="act('block',${u.id})">${r.isb?'إلغاء الحظر':'حظر'}</button>`}</div></div>
+${r.lock?'<div class=e>🔒 هذا حساب خاص<br>تابعه لرؤية منشوراته</div>':''}<div class=grid>${r.posts.map(p=>p.mt=='v'?`<video src="${p.media}" onclick="one(${p.id})"></video>`:p.media?`<img src="${p.media}" onclick="one(${p.id})">`:`<div class=t onclick="one(${p.id})">${E(p.txt)}</div>`).join('')}</div>`;window.PP=r.posts}
 async function act(a,id){await api(a,{id});prof(id)}
 function one(id){const p=PP.find(x=>x.id==id);modal(card(p))}
-function editProf(){modal(`<h3>تعديل الملف الشخصي</h3><input type=file id=ef accept="image/*"><input id=en value="${E(ME.name)}"><textarea id=eb rows=3 placeholder="نبذة عنك"></textarea><button onclick="saveProf()">حفظ</button>`);api('profile',{id:ME.id}).then(r=>r&&($('#eb').value=r.u.bio))}
-async function saveProf(){const f=$('#ef').files[0],r=await api('editprofile',{name:$('#en').value,bio:$('#eb').value,av:f?await rd(f):''});if(r){ME=r.me;closeM();prof(ME.id)}}
+function editProf(){modal(`<h3>تعديل الملف الشخصي</h3><input type=file id=ef accept="image/*"><input id=edn placeholder="اسم الحساب (الاسم الظاهر)"><input id=en value="${E(ME.name)}"><textarea id=eb rows=3 placeholder="نبذة عنك"></textarea><label><input type=checkbox id=ep style="width:auto"> 🔒 حساب خاص (لا يراسلك إلا من تقبل متابعته)</label><br><br><button onclick="saveProf()">حفظ</button>`);api('profile',{id:ME.id}).then(r=>{if(r){$('#eb').value=r.u.bio;$('#edn').value=r.u.dn||'';$('#ep').checked=!!r.u.priv}})}
+async function saveProf(){const f=$('#ef').files[0],r=await api('editprofile',{name:$('#en').value,dn:$('#edn').value,priv:$('#ep').checked,bio:$('#eb').value,av:f?await rd(f):''});if(r){ME=r.me;closeM();prof(ME.id)}}
 async function lists(){const r=await api('lists');const f=a=>a.map(u=>`<div class=li onclick="closeM();prof(${u.id})">${av(u)}<b>${E(u.name)}</b></div>`).join('')||'<div class=e>لا أحد</div>';modal(`<h3>الأشخاص المحظورون</h3>${f(r.bl)}<h3>الأشخاص المحصورون</h3>${f(r.rs)}`)}
 
 /* ---------- notifications ---------- */
-async function notifV(){const r=await api('notifs');V().innerHTML=`<h3 style="padding:0 14px">الإشعارات</h3>`+(r.n.map(n=>`<div class=li><div>${E(n.txt)}<small>${tm(n.ts)}</small></div></div>`).join('')||'<div class=e>لا إشعارات</div>')}
+async function notifV(){const r=await api('notifs');V().innerHTML=`<h3 style="padding:0 14px">الإشعارات</h3>`+(r.n.map(n=>`<div class=li><div>${E(n.txt)}<small>${tm(n.ts)}</small></div>${n.k=='req'?`<span class=sp></span><button onclick="acc('accept',${n.x})">قبول</button><button class=g onclick="acc('decline',${n.x})">رفض</button>`:''}</div>`).join('')||'<div class=e>لا إشعارات</div>')}
 
+async function acc(a,id){await api(a,{id});notifV()}
 /* ---------- chats ---------- */
 async function chatsV(){const r=await api('chats');V().innerHTML=`<div style="padding:0 14px"><h3>الرسائل</h3><p style="color:var(--mu)">للبدء بمحادثة جديدة ابحث عن شخص وافتح ملفه.</p></div>`+(r.chats.map(c=>`<div class=li onclick="chat(${c.id},'${E(c.name)}')">${av(c)}<div><b>${E(c.name)}</b><small>${E(c.last)}</small></div></div>`).join('')||'<div class=e>لا محادثات</div>')}
 let lastS='';
-function chat(o,name){clearInterval(poll);lastS='';V().innerHTML=`<div class=ch><div class=h><a onclick="show('chats')">➡️ رجوع</a><b onclick="prof(${o})">${name}</b><span class=sp></span><a onclick="delChat(${o})">🗑 حذف المحادثة</a></div><div id=ms></div><div class=in><label>📎<input type=file hidden id=cf accept="image/*,video/*" onchange="send(${o})"></label><input id=ct placeholder="اكتب رسالة..." onkeydown="if(event.key=='Enter')send(${o})"><button onclick="send(${o})">إرسال</button></div></div>`;loadM(o);poll=setInterval(()=>loadM(o),3000)}
-async function loadM(o){const r=await fetch('/api',{method:'POST',body:JSON.stringify({a:'msgs',t:T,o})}).then(x=>x.json()).catch(()=>null);if(!r||!r.m)return;const s=JSON.stringify(r.m);if(s==lastS)return;lastS=s;const b=$('#ms');if(!b)return;
-b.innerHTML=r.m.map(m=>{const me=m.f==ME.id;return `<div class="m${me?' me':''}">${m.media?(m.mt=='v'?`<video src="${m.media}" controls playsinline></video>`:`<img src="${m.media}">`):''}${E(m.txt)}<small>${me?`<a onclick="edM(${m.id},${o})">✏️</a><a onclick="dlM(${m.id},${o})">🗑</a>`:''}${tm(m.ts)}${m.edited?' · معدّلة':''}</small></div>`}).join('');b.scrollTop=b.scrollHeight}
-async function send(o){const f=$('#cf').files[0],t=$('#ct').value;if(!f&&!t.trim())return;$('#ct').value='';const r=await api('send',{o,txt:t,media:f?await rd(f):''});$('#cf').value='';lastS='';if(r)loadM(o)}
-async function edM(id,o){const t=prompt('عدّل الرسالة:');if(t!==null){await api('editmsg',{id,txt:t});lastS='';loadM(o)}}
-async function dlM(id,o){if(confirm('حذف الرسالة لدى الجميع؟')){await api('delmsg',{id});lastS='';loadM(o)}}
-async function delChat(o){if(confirm('حذف المحادثة من عندك؟')){await api('delchat',{o});show('chats')}}
-
-/* ---------- developer panel ---------- */
-let AT='acc',AD=null;
-async function adminV(){$('#app').innerHTML=`<div class=ad><div class=h style="padding:0"><div class=logo style="font-size:30px">Mi · لوحة التحكم</div><span class=sp></span><button class=g onclick="logout()">خروج</button></div>
-<div class=tabs><button onclick="AT='acc';adR()">إدارة الحسابات</button><button onclick="AT='frz';adR()">الحسابات المجمّدة</button><button onclick="AT='st';adR()">الإحصائيات</button></div><div id=ab></div></div>`;await adL();clearInterval(adT);adT=setInterval(adL,5000)}
-async function adL(){const r=await api('adm');if(r){AD=r;adR()}}
-function adR(){if(!AD||!$('#ab'))return;const us=AD.users,d=t=>t?new Date(t*1000).toLocaleString('ar'):'-';
-if(AT=='st')$('#ab').innerHTML=`<div class=ar><div class=big>${AD.online}</div>مستخدم نشط الآن</div><div class=ar><div class=big>${AD.total}</div>حساب تم إنشاؤه</div>`;
-else{const l=us.filter(u=>AT=='frz'?u.frozen:true);$('#ab').innerHTML=(AT=='acc'?`<p style="color:var(--mu)">عدد الحسابات: ${us.length}</p>`:'')+(l.map(u=>`<div class=ar><b>${E(u.name)}</b> ${u.frozen?'🧊':''}<small>تاريخ الإنشاء: ${d(u.created)}</small><small>آخر دخول: ${d(u.last)}</small><div class=row>${u.frozen?`<button onclick="adA('freeze',${u.id},0)">فك التجميد</button>`:`<button class=g onclick="adA('freeze',${u.id},1)">تجميد</button>`}<button class=d onclick="if(confirm('حذف نهائي لا رجعة فيه؟'))adA('deluser',${u.id})">حذف نهائي</button></div></div>`).join('')||'<div class=e>لا حسابات</div>')}}
-async function adA(a,id,v){await api(a,{id,v});adL()}
-
-/* ---------- start ---------- */
-(async()=>{if(!T)return authV();const r=await api('me');if(!r)return;if(r.admin)adminV();else{ME=r.me;main()}})();
-</script></body></html>
+function chat(o,name){clearInterval(poll);lastS='';V().innerHTML=`<div class=ch><div class=h><a onclick="show('chats')">➡️ رجوع</a><div onclick="prof(${o})"><b>${name}</b><br><small id=cs style="color:var(--mu)"></small></div><span class=sp></span><a onclick="delChat(${o})">🗑 حذف المحادثة</a></div><div id=ms></div><div class=in><label>📎<input type=file hidden id=cf accept="image/*,video/*" onchange="send(${o})"></label><input id=ct placeholder="اكتب رسالة..." onkeydown="if(event.key=='Enter')send(${o})"><button onclick="send(${o})">إرسال</button></div></div>`;loadM(o);poll=setInterval(()=>loadM(o),3000)}
+async function loadM(o){const r=await fetch('/api',{method:'POST',body:JSON.stringify({a:'msgs',t:T,o})}).then(x=>x.json()).catch(()
